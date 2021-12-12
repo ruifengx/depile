@@ -137,7 +137,8 @@ pub enum Instr {
 
 #[cfg(test)]
 mod tests {
-    use crate::instr::{BOp, BranchKind, Instr, Operand, UOp};
+    use super::{BOp, BranchKind, Instr, Operand, UOp};
+
     macro_rules! assert_equiv {
         ($($str: expr => $val: expr),+ $(,)?) => {
             $(

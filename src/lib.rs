@@ -23,3 +23,6 @@
 #![warn(missing_docs)]
 
 pub mod instr;
+pub mod program;
+
+pub use instr::Instr;
