@@ -21,3 +21,5 @@
 //! Specification of input format
 
 #![warn(missing_docs)]
+
+pub mod instr;
