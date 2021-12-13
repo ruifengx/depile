@@ -61,6 +61,8 @@ pub enum Error {
     InvalidArguments(#[from] clap::Error),
     /// parse error: {0}
     InvalidInput(#[from] program::ParseError),
+    /// malformed program: {0}
+    MalformedInput(#[from] block::Error),
     /// failed to read file: {0}
     Io(#[from] std::io::Error),
     /// cannot format the output: {0}
@@ -83,7 +85,7 @@ impl Cli {
             Commands::Blocks { input } => {
                 let contents = std::fs::read_to_string(&input)?;
                 let program = read_program(&contents)?;
-                let blocks = block::from_program(&program);
+                let blocks = block::from_program(&program)?;
                 println!("{}", display_blocks(blocks)?);
             }
         }

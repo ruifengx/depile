@@ -19,33 +19,100 @@
 //! Basic blocks, and related API.
 
 use itertools::Itertools;
+use thiserror::Error;
+use displaydoc::Display;
+
+use crate::instr::{BranchKind, Operand};
+use crate::program::SourceLine;
 use super::{Instr, Program};
 
 /// Basic block.
 pub type Block = [Instr];
 
+/// Program validation error during conversion to a series of basic blocks.
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /**
+     * invalid function call:
+     * - found this `call` instruction:     {call_instr}
+     * - but its target is not an `enter`:  {target_instr}
+     */
+    #[allow(missing_docs)]
+    CallEnterMismatch {
+        call_instr: SourceLine,
+        target_instr: SourceLine,
+    },
+    /**
+     * invalid reference to register:
+     * - this instruction wants a return value:  {source_instr}
+     * - but its target does not have one:       {target_instr}
+     */
+    InvalidReference {
+        /// The offending instruction (which attempts to read a register).
+        source_instr: SourceLine,
+        /// Return value of this instruction is undefined.
+        target_instr: SourceLine,
+    },
+}
+
+fn check_operand(program: &Program, x: &Operand, pc: usize, cur: &Instr) -> Result<(), Error> {
+    if let Operand::Register(r) = x {
+        let target = &program[*r - 1];
+        match target {
+            Instr::Binary { .. }
+            | Instr::Unary { .. }
+            | Instr::Load(_)
+            | Instr::Move { .. }
+            | Instr::Read(_) => {}
+            _ => return Err(Error::InvalidReference {
+                source_instr: SourceLine { index: pc, instr: cur.clone() },
+                target_instr: SourceLine { index: *r, instr: target.clone() },
+            }),
+        }
+    }
+    Ok(())
+}
+
 /// Partition the [`Program`] into basic [`Block`]s.
-pub fn from_program(program: &Program) -> impl Iterator<Item=&Block> {
+pub fn from_program(program: &Program) -> Result<impl Iterator<Item=&Block>, Error> {
     let n = program.len();
     let mut is_leader = vec![false; n + 1];
     is_leader[0] = true;
     is_leader[n] = true;
     for (k, instr) in program.iter().enumerate() {
         match instr {
+            Instr::Binary { lhs, rhs, .. } => {
+                check_operand(program, lhs, k, instr)?;
+                check_operand(program, rhs, k, instr)?;
+            }
+            Instr::Unary { operand, .. } =>
+                check_operand(program, operand, k, instr)?,
+            // we decide that a `call` does not partition the basic block, because control
+            // flows are guaranteed to resume later.
+            Instr::Branch { dest, method: BranchKind::Call } => {
+                let target = &program[*dest - 1];
+                if !matches!(target, Instr::EnterProc(_)) {
+                    return Err(Error::CallEnterMismatch {
+                        call_instr: SourceLine { index: k, instr: instr.clone() },
+                        target_instr: SourceLine { index: *dest, instr: target.clone() },
+                    });
+                }
+            }
             Instr::Branch { dest, .. } => {
                 is_leader[*dest - 1] = true;
                 is_leader[k + 1] = true;
             }
+            Instr::EnterProc(_) => is_leader[k] = true,
             Instr::Ret(_) => is_leader[k + 1] = true,
             _ => {}
         }
     }
-    is_leader.into_iter()
+    Ok(is_leader.into_iter()
         .enumerate()
         .filter(|(_, p)| *p)
         .map(|(k, _)| k)
         .tuple_windows()
-        .map(|(l, r)| &program[l..r])
+        .map(|(l, r)| &program[l..r]))
 }
 
 /// Print a series of basic blocks.
@@ -76,8 +143,8 @@ mod tests {
     #[test]
     fn test_block_from_program() {
         let program = read_program(samples::GCD).unwrap();
-        let blocks = from_program(&program);
+        let blocks = from_program(&program).unwrap();
         assert_eq!(blocks.map(|b| b.len()).collect_vec(),
-                   vec![1, 1, 2, 9, 3, 13, 16, 5, 1]);
+                   vec![1, 1, 2, 9, 3, 1, 33, 1]);
     }
 }

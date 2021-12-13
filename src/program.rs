@@ -25,11 +25,16 @@ use thiserror::Error;
 use crate::instr::Instr;
 use crate::program::ParseError::InvalidIndex;
 
+/// A single line in the source program.
+///
+/// Only used internally and in error messages.
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[display("instr {index}: {instr}")]
-struct SourceLine {
-    index: usize,
-    instr: Instr,
+pub struct SourceLine {
+    /// A line index `k` as in `instr k:`.
+    pub index: usize,
+    /// The instruction.
+    pub instr: Instr,
 }
 
 /// Parse error for [`Program`]s.
