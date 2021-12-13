@@ -44,8 +44,8 @@ pub enum Error {
     },
     /**
      * invalid reference to register:
-     * - this instruction wants a return value:  {source_instr}
-     * - but its target does not have one:       {target_instr}
+     * - this instruction accesses a return value:      {source_instr}
+     * - but the target instruction does not have one:  {target_instr}
      */
     InvalidReference {
         /// The offending instruction (which attempts to read a register).
@@ -55,24 +55,6 @@ pub enum Error {
     },
 }
 
-fn check_operand(program: &Program, x: &Operand, pc: usize, cur: &Instr) -> Result<(), Error> {
-    if let Operand::Register(r) = x {
-        let target = &program[*r - 1];
-        match target {
-            Instr::Binary { .. }
-            | Instr::Unary { .. }
-            | Instr::Load(_)
-            | Instr::Move { .. }
-            | Instr::Read(_) => {}
-            _ => return Err(Error::InvalidReference {
-                source_instr: SourceLine { index: pc, instr: cur.clone() },
-                target_instr: SourceLine { index: *r, instr: target.clone() },
-            }),
-        }
-    }
-    Ok(())
-}
-
 /// Partition the [`Program`] into basic [`Block`]s.
 pub fn from_program(program: &Program) -> Result<impl Iterator<Item=&Block>, Error> {
     let n = program.len();
@@ -80,13 +62,37 @@ pub fn from_program(program: &Program) -> Result<impl Iterator<Item=&Block>, Err
     is_leader[0] = true;
     is_leader[n] = true;
     for (k, instr) in program.iter().enumerate() {
-        match instr {
-            Instr::Binary { lhs, rhs, .. } => {
-                check_operand(program, lhs, k, instr)?;
-                check_operand(program, rhs, k, instr)?;
+        let check_operand = |xs: &[&Operand]| -> Result<(), Error> {
+            for x in xs {
+                if let Operand::Register(r) = x {
+                    let target = &program[*r - 1];
+                    match target {
+                        Instr::Binary { .. } | Instr::Unary { .. }
+                        | Instr::Load(_) | Instr::Move { .. } | Instr::Read(_) => {}
+                        _ => return Err(Error::InvalidReference {
+                            source_instr: SourceLine { index: k, instr: instr.clone() },
+                            target_instr: SourceLine { index: *r, instr: target.clone() },
+                        }),
+                    }
+                }
             }
-            Instr::Unary { operand, .. } =>
-                check_operand(program, operand, k, instr)?,
+            Ok(())
+        };
+
+        macro_rules! check {
+            ($($operand : expr),+ $(,)?) => {
+                check_operand(&[$($operand),+])
+            }
+        }
+
+        match instr {
+            Instr::Binary { lhs, rhs, .. } => check!(lhs, rhs)?,
+            Instr::Unary { operand, .. } => check!(operand)?,
+            Instr::Load(operand) => check!(operand)?,
+            Instr::Read(operand) => check!(operand)?,
+            Instr::Store { data, address } => check!(data, address)?,
+            Instr::Write(operand) => check!(operand)?,
+            Instr::PushParam(operand) => check!(operand)?,
             // we decide that a `call` does not partition the basic block, because control
             // flows are guaranteed to resume later.
             Instr::Branch { dest, method: BranchKind::Call } => {
