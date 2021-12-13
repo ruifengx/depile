@@ -53,14 +53,39 @@ pub enum Error {
         /// Return value of this instruction is undefined.
         target_instr: SourceLine,
     },
+    /**
+     * invalid `entrypc` instruction: {entry_instr}
+     * - it should be directly followed by an `enter` instruction
+     * - but we got this instruction instead:  {following_instr}
+     */
+    InvalidEntry {
+        /// The `entrypc` instruction in discussion.
+        entry_instr: SourceLine,
+        /// The following instruction, expected to be an `enter`.
+        following_instr: SourceLine,
+    },
+    /// no entry point found.
+    NoEntryPoint,
+    /// found multiple `entrypc` instructions: {0:?}.
+    MultipleEntries(Vec<usize>),
+}
+
+/// Collection of basic blocks for a [`Program`].
+pub struct Blocks<'a> {
+    /// List of basic blocks, in ascending order for instruction index.
+    pub blocks: Vec<&'a Block>,
+    /// The index of the entry block (marked as `entrypc`).
+    pub entry_block: usize,
 }
 
 /// Partition the [`Program`] into basic [`Block`]s.
-pub fn from_program(program: &Program) -> Result<impl Iterator<Item=&Block>, Error> {
+pub fn from_program(program: &Program) -> Result<Blocks, Error> {
     let n = program.len();
     let mut is_leader = vec![false; n + 1];
     is_leader[0] = true;
     is_leader[n] = true;
+
+    let mut entries = Vec::new();
     for (k, instr) in program.iter().enumerate() {
         let check_operand = |xs: &[&Operand]| -> Result<(), Error> {
             for x in xs {
@@ -86,6 +111,7 @@ pub fn from_program(program: &Program) -> Result<impl Iterator<Item=&Block>, Err
         }
 
         match instr {
+            // validate register access
             Instr::Binary { lhs, rhs, .. } => check!(lhs, rhs)?,
             Instr::Unary { operand, .. } => check!(operand)?,
             Instr::Load(operand) => check!(operand)?,
@@ -93,6 +119,17 @@ pub fn from_program(program: &Program) -> Result<impl Iterator<Item=&Block>, Err
             Instr::Store { data, address } => check!(data, address)?,
             Instr::Write(operand) => check!(operand)?,
             Instr::PushParam(operand) => check!(operand)?,
+            // validate `entrypc`
+            Instr::EntryPc => {
+                entries.push(k);
+                let next = &program[k + 1];
+                if !matches!(next, Instr::EnterProc(_)) {
+                    return Err(Error::InvalidEntry {
+                        entry_instr: SourceLine { index: k, instr: instr.clone() },
+                        following_instr: SourceLine { index: k, instr: next.clone() },
+                    });
+                }
+            }
             // we decide that a `call` does not partition the basic block, because control
             // flows are guaranteed to resume later.
             Instr::Branch { dest, method: BranchKind::Call } => {
@@ -113,29 +150,39 @@ pub fn from_program(program: &Program) -> Result<impl Iterator<Item=&Block>, Err
             _ => {}
         }
     }
-    Ok(is_leader.into_iter()
-        .enumerate()
-        .filter(|(_, p)| *p)
-        .map(|(k, _)| k)
-        .tuple_windows()
-        .map(|(l, r)| &program[l..r]))
+    if entries.is_empty() { return Err(Error::NoEntryPoint); }
+    if entries.len() > 1 { return Err(Error::MultipleEntries(entries)); }
+    assert!(is_leader[entries[0]] && is_leader[entries[0] + 1]);
+
+    Ok(Blocks {
+        blocks: is_leader.iter().copied()
+            .enumerate()
+            .filter(|(_, p)| *p)
+            .map(|(k, _)| k)
+            .tuple_windows()
+            .map(|(l, r)| &program[l..r])
+            .collect(),
+        entry_block: 1 + is_leader.iter().copied()
+            .take(entries[0])
+            .filter(|&p| p)
+            .count(),
+    })
 }
 
-/// Print a series of basic blocks.
-pub fn display_blocks<'a, I>(blocks: I) -> Result<String, std::fmt::Error>
-    where I: Iterator<Item=&'a Block> {
-    use std::fmt::Write;
-    let mut n = 0;
-    let mut res = String::new();
-    for (k, block) in blocks.enumerate() {
-        writeln!(res, "Block #{}:", k)?;
-        for instr in block {
-            n += 1;
-            writeln!(res, "  instr {}: {}", n, instr)?;
+impl<'a> std::fmt::Display for Blocks<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut n = 0;
+        for (k, &block) in self.blocks.iter().enumerate() {
+            if k == self.entry_block { write!(f, "(ENTRY) ")?; }
+            writeln!(f, "Block #{}:", k)?;
+            for instr in block {
+                n += 1;
+                writeln!(f, "  instr {}: {}", n, instr)?;
+            }
+            writeln!(f)?;
         }
-        writeln!(res)?;
+        Ok(())
     }
-    Ok(res)
 }
 
 #[cfg(test)]
@@ -150,7 +197,8 @@ mod tests {
     fn test_block_from_program() {
         let program = read_program(samples::GCD).unwrap();
         let blocks = from_program(&program).unwrap();
-        assert_eq!(blocks.map(|b| b.len()).collect_vec(),
+        assert_eq!(blocks.blocks.iter().map(|b| b.len()).collect_vec(),
                    vec![1, 1, 2, 9, 3, 1, 33, 1]);
+        assert_eq!(blocks.entry_block, 6);
     }
 }

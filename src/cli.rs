@@ -23,8 +23,7 @@ use displaydoc::Display;
 use thiserror::Error;
 use clap::{AppSettings, Parser, Subcommand};
 
-use crate::{block, block::display_blocks, program};
-use crate::program::{display_program, read_program};
+use crate::{block, program::{self, display_program, read_program}};
 
 /// Entry to the command line interface.
 #[derive(Parser)]
@@ -86,7 +85,7 @@ impl Cli {
                 let contents = std::fs::read_to_string(&input)?;
                 let program = read_program(&contents)?;
                 let blocks = block::from_program(&program)?;
-                println!("{}", display_blocks(blocks)?);
+                println!("{}", blocks);
             }
         }
         Ok(())

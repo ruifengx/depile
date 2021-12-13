@@ -37,3 +37,4 @@ mod samples;
 
 pub use instr::Instr;
 pub use program::Program;
+pub use block::{Block, Blocks};
