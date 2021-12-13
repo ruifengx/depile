@@ -15,7 +15,7 @@ description = "Translate three-address code back to C code."
 parse-display = "0.5.3"
 thiserror = "1.0.30"
 displaydoc = "0.2.3"
+itertools = "0.10.3"
 
 [dev-dependencies]
 indoc = "1.0.3"
-itertools = "0.10.3"

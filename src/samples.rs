@@ -16,18 +16,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-//! Translate three-address code back to C code.
-//!
-//! Specification of input format
+#![allow(unused)]
 
-#![warn(missing_docs)]
+macro_rules! include_samples {
+    ($($name: ident),+ $(,)?) => {
+        $(
+            pub const $name: &str = include_str!(concat!("samples/", stringify!($name), ".txt"));
+        )+
+    }
+}
 
-pub mod instr;
-pub mod program;
-pub mod block;
-
-#[cfg(test)]
-mod samples;
-
-pub use instr::Instr;
-pub use program::Program;
+include_samples! {
+    SIMPLE,
+    COLLATZ,
+    GCD,
+    HANOIFIBFAC,
+    LOOP,
+    MMM,
+    PRIME,
+    REGSLARGE,
+    SIEVE,
+    SORT,
+    STRUCT,
+}
