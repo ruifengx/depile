@@ -23,6 +23,10 @@
 
 #![warn(missing_docs)]
 
+use depile::Cli;
+
 fn main() {
-    println!("depile: not yet implemented");
+    if let Err(err) = Cli::run() {
+        eprintln!("{}", err);
+    }
 }

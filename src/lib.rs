@@ -26,6 +26,12 @@ pub mod instr;
 pub mod program;
 pub mod block;
 
+#[cfg(feature = "cli")]
+pub mod cli;
+
+#[cfg(feature = "cli")]
+pub use cli::Cli;
+
 #[cfg(test)]
 mod samples;
 
