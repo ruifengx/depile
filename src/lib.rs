@@ -25,6 +25,7 @@
 pub mod instr;
 pub mod program;
 pub mod block;
+pub mod function;
 
 #[cfg(feature = "cli")]
 pub mod cli;

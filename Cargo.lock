@@ -70,6 +70,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "displaydoc",
+ "either",
  "indoc",
  "itertools",
  "parse-display",

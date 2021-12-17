@@ -18,6 +18,7 @@
 
 //! Basic blocks, and related API.
 
+use std::ops::RangeInclusive;
 use itertools::Itertools;
 use thiserror::Error;
 use displaydoc::Display;
@@ -27,7 +28,24 @@ use crate::program::SourceLine;
 use super::{Instr, Program};
 
 /// Basic block.
-pub type Block = [Instr];
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Block<'a> {
+    /// Index of the first instruction.
+    pub first_index: usize,
+    /// All the instructions in this basic block.
+    pub instructions: &'a [Instr],
+}
+
+impl<'a> Block<'a> {
+    /// Index of the last instruction.
+    pub fn last_index(self) -> usize {
+        self.first_index + self.instructions.len() - 1
+    }
+    /// Range of the indices of instructions in this basic block.
+    pub fn index_range(self) -> RangeInclusive<usize> {
+        self.first_index..=self.last_index()
+    }
+}
 
 /// Program validation error during conversion to a series of basic blocks.
 #[derive(Debug, Display, Error)]
@@ -73,9 +91,16 @@ pub enum Error {
 /// Collection of basic blocks for a [`Program`].
 pub struct Blocks<'a> {
     /// List of basic blocks, in ascending order for instruction index.
-    pub blocks: Vec<&'a Block>,
+    pub blocks: Vec<Block<'a>>,
     /// The index of the entry block (marked as `entrypc`).
     pub entry_block: usize,
+}
+
+impl<'a> Blocks<'a> {
+    /// Get the parent block index from an instruction index.
+    pub fn parent_block_of(&self, instr_idx: usize) -> usize {
+        self.blocks.partition_point(|block| block.index_range().contains(&instr_idx))
+    }
 }
 
 /// Partition the [`Program`] into basic [`Block`]s.
@@ -160,7 +185,7 @@ pub fn from_program(program: &Program) -> Result<Blocks, Error> {
             .filter(|(_, p)| *p)
             .map(|(k, _)| k)
             .tuple_windows()
-            .map(|(l, r)| &program[l..r])
+            .map(|(l, r)| Block { first_index: l, instructions: &program[l..r] })
             .collect(),
         entry_block: 1 + is_leader.iter().copied()
             .take(entries[0])
@@ -175,7 +200,7 @@ impl<'a> std::fmt::Display for Blocks<'a> {
         for (k, &block) in self.blocks.iter().enumerate() {
             if k == self.entry_block { write!(f, "(ENTRY) ")?; }
             writeln!(f, "Block #{}:", k)?;
-            for instr in block {
+            for instr in block.instructions {
                 n += 1;
                 writeln!(f, "  instr {}: {}", n, instr)?;
             }
@@ -194,10 +219,10 @@ mod tests {
     use super::from_program;
 
     #[test]
-    fn test_block_from_program() {
+    fn test_blocks_from_program() {
         let program = read_program(samples::GCD).unwrap();
         let blocks = from_program(&program).unwrap();
-        assert_eq!(blocks.blocks.iter().map(|b| b.len()).collect_vec(),
+        assert_eq!(blocks.blocks.iter().map(|b| b.instructions.len()).collect_vec(),
                    vec![1, 1, 2, 9, 3, 1, 33, 1]);
         assert_eq!(blocks.entry_block, 6);
     }
