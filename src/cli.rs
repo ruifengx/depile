@@ -22,27 +22,26 @@ use std::path::PathBuf;
 use displaydoc::Display as DisplayDoc;
 use parse_display::{Display, FromStr};
 use thiserror::Error;
-use clap::{AppSettings, Parser};
+use clap::{Parser, ArgEnum};
 
 use crate::{block, Blocks, program::{self, display_program, read_program}};
 
 /// Entry to the command line interface.
 #[derive(Parser)]
-#[clap(global_setting(AppSettings::PropagateVersion))]
-#[clap(global_setting(AppSettings::UseLongFormatForHelpSubcommand))]
-#[clap(setting(AppSettings::SubcommandRequiredElseHelp))]
 #[clap(author, version, about)]
 pub struct Cli {
     /// The input three-address code source file.
+    #[clap(parse(from_os_str))]
     input: PathBuf,
-    /// The subcommand to execute.
-    #[clap(short, long)]
-    target_format: TargetFormat,
+    /// Output format.
+    #[clap(short, long, arg_enum, default_value_t = Format::Blocks)]
+    target: Format,
 }
 
 /// Supported target formats.
-#[derive(Debug, Display, FromStr, Eq, PartialEq)]
-pub enum TargetFormat {
+#[derive(Debug, Display, FromStr, ArgEnum, Copy, Clone, Eq, PartialEq)]
+#[display(style = "snake_case")]
+pub enum Format {
     /// Print out the input file unchanged (disregarding whitespaces).
     Echo,
     /// Partition the input file as basic blocks.
@@ -74,11 +73,11 @@ impl Cli {
         let options: Cli = Cli::try_parse()?;
         let contents = std::fs::read_to_string(&options.input)?;
         let program = read_program(&contents)?;
-        match options.target_format {
-            TargetFormat::Echo => {
+        match options.target {
+            Format::Echo => {
                 println!("{}", display_program(&program)?)
             }
-            TargetFormat::Blocks => {
+            Format::Blocks => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 println!("{}", blocks);
             }
