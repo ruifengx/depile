@@ -103,95 +103,98 @@ impl<'a> Blocks<'a> {
     }
 }
 
-/// Partition the [`Program`] into basic [`Block`]s.
-pub fn from_program(program: &Program) -> Result<Blocks, Error> {
-    let n = program.len();
-    let mut is_leader = vec![false; n + 1];
-    is_leader[0] = true;
-    is_leader[n] = true;
+impl<'a> TryFrom<&'a Program> for Blocks<'a> {
+    type Error = Error;
+    /// Partition the [`Program`] into basic [`Block`]s.
+    fn try_from(program: &Program) -> Result<Blocks, Error> {
+        let n = program.len();
+        let mut is_leader = vec![false; n + 1];
+        is_leader[0] = true;
+        is_leader[n] = true;
 
-    let mut entries = Vec::new();
-    for (k, instr) in program.iter().enumerate() {
-        let check_operand = |xs: &[&Operand]| -> Result<(), Error> {
-            for x in xs {
-                if let Operand::Register(r) = x {
-                    let target = &program[*r - 1];
-                    match target {
-                        Instr::Binary { .. } | Instr::Unary { .. }
-                        | Instr::Load(_) | Instr::Move { .. } | Instr::Read(_) => {}
-                        _ => return Err(Error::InvalidReference {
-                            source_instr: SourceLine { index: k, instr: instr.clone() },
-                            target_instr: SourceLine { index: *r, instr: target.clone() },
-                        }),
+        let mut entries = Vec::new();
+        for (k, instr) in program.iter().enumerate() {
+            let check_operand = |xs: &[&Operand]| -> Result<(), Error> {
+                for x in xs {
+                    if let Operand::Register(r) = x {
+                        let target = &program[*r - 1];
+                        match target {
+                            Instr::Binary { .. } | Instr::Unary { .. }
+                            | Instr::Load(_) | Instr::Move { .. } | Instr::Read(_) => {}
+                            _ => return Err(Error::InvalidReference {
+                                source_instr: SourceLine { index: k, instr: instr.clone() },
+                                target_instr: SourceLine { index: *r, instr: target.clone() },
+                            }),
+                        }
                     }
                 }
-            }
-            Ok(())
-        };
+                Ok(())
+            };
 
-        macro_rules! check {
+            macro_rules! check {
             ($($operand : expr),+ $(,)?) => {
                 check_operand(&[$($operand),+])
             }
         }
 
-        match instr {
-            // validate register access
-            Instr::Binary { lhs, rhs, .. } => check!(lhs, rhs)?,
-            Instr::Unary { operand, .. } => check!(operand)?,
-            Instr::Load(operand) => check!(operand)?,
-            Instr::Read(operand) => check!(operand)?,
-            Instr::Store { data, address } => check!(data, address)?,
-            Instr::Write(operand) => check!(operand)?,
-            Instr::PushParam(operand) => check!(operand)?,
-            // validate `entrypc`
-            Instr::EntryPc => {
-                entries.push(k);
-                let next = &program[k + 1];
-                if !matches!(next, Instr::EnterProc(_)) {
-                    return Err(Error::InvalidEntry {
-                        entry_instr: SourceLine { index: k, instr: instr.clone() },
-                        following_instr: SourceLine { index: k, instr: next.clone() },
-                    });
+            match instr {
+                // validate register access
+                Instr::Binary { lhs, rhs, .. } => check!(lhs, rhs)?,
+                Instr::Unary { operand, .. } => check!(operand)?,
+                Instr::Load(operand) => check!(operand)?,
+                Instr::Read(operand) => check!(operand)?,
+                Instr::Store { data, address } => check!(data, address)?,
+                Instr::Write(operand) => check!(operand)?,
+                Instr::PushParam(operand) => check!(operand)?,
+                // validate `entrypc`
+                Instr::EntryPc => {
+                    entries.push(k);
+                    let next = &program[k + 1];
+                    if !matches!(next, Instr::EnterProc(_)) {
+                        return Err(Error::InvalidEntry {
+                            entry_instr: SourceLine { index: k, instr: instr.clone() },
+                            following_instr: SourceLine { index: k, instr: next.clone() },
+                        });
+                    }
                 }
-            }
-            // we decide that a `call` does not partition the basic block, because control
-            // flows are guaranteed to resume later.
-            Instr::Branch { dest, method: BranchKind::Call } => {
-                let target = &program[*dest - 1];
-                if !matches!(target, Instr::EnterProc(_)) {
-                    return Err(Error::CallEnterMismatch {
-                        call_instr: SourceLine { index: k, instr: instr.clone() },
-                        target_instr: SourceLine { index: *dest, instr: target.clone() },
-                    });
+                // we decide that a `call` does not partition the basic block, because control
+                // flows are guaranteed to resume later.
+                Instr::Branch { dest, method: BranchKind::Call } => {
+                    let target = &program[*dest - 1];
+                    if !matches!(target, Instr::EnterProc(_)) {
+                        return Err(Error::CallEnterMismatch {
+                            call_instr: SourceLine { index: k, instr: instr.clone() },
+                            target_instr: SourceLine { index: *dest, instr: target.clone() },
+                        });
+                    }
                 }
+                Instr::Branch { dest, .. } => {
+                    is_leader[*dest - 1] = true;
+                    is_leader[k + 1] = true;
+                }
+                Instr::EnterProc(_) => is_leader[k] = true,
+                Instr::Ret(_) => is_leader[k + 1] = true,
+                _ => {}
             }
-            Instr::Branch { dest, .. } => {
-                is_leader[*dest - 1] = true;
-                is_leader[k + 1] = true;
-            }
-            Instr::EnterProc(_) => is_leader[k] = true,
-            Instr::Ret(_) => is_leader[k + 1] = true,
-            _ => {}
         }
-    }
-    if entries.is_empty() { return Err(Error::NoEntryPoint); }
-    if entries.len() > 1 { return Err(Error::MultipleEntries(entries)); }
-    assert!(is_leader[entries[0]] && is_leader[entries[0] + 1]);
+        if entries.is_empty() { return Err(Error::NoEntryPoint); }
+        if entries.len() > 1 { return Err(Error::MultipleEntries(entries)); }
+        assert!(is_leader[entries[0]] && is_leader[entries[0] + 1]);
 
-    Ok(Blocks {
-        blocks: is_leader.iter().copied()
-            .enumerate()
-            .filter(|(_, p)| *p)
-            .map(|(k, _)| k)
-            .tuple_windows()
-            .map(|(l, r)| Block { first_index: l, instructions: &program[l..r] })
-            .collect(),
-        entry_block: 1 + is_leader.iter().copied()
-            .take(entries[0])
-            .filter(|&p| p)
-            .count(),
-    })
+        Ok(Blocks {
+            blocks: is_leader.iter().copied()
+                .enumerate()
+                .filter(|(_, p)| *p)
+                .map(|(k, _)| k)
+                .tuple_windows()
+                .map(|(l, r)| Block { first_index: l, instructions: &program[l..r] })
+                .collect(),
+            entry_block: 1 + is_leader.iter().copied()
+                .take(entries[0])
+                .filter(|&p| p)
+                .count(),
+        })
+    }
 }
 
 impl<'a> std::fmt::Display for Blocks<'a> {
@@ -213,15 +216,14 @@ impl<'a> std::fmt::Display for Blocks<'a> {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-
+    use super::Blocks;
     use crate::samples;
     use crate::program::read_program;
-    use super::from_program;
 
     #[test]
     fn test_blocks_from_program() {
         let program = read_program(samples::GCD).unwrap();
-        let blocks = from_program(&program).unwrap();
+        let blocks = Blocks::try_from(program.as_ref()).unwrap();
         assert_eq!(blocks.blocks.iter().map(|b| b.instructions.len()).collect_vec(),
                    vec![1, 1, 2, 9, 3, 1, 33, 1]);
         assert_eq!(blocks.entry_block, 6);
