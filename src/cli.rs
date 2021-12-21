@@ -19,9 +19,10 @@
 //! Command line interface support.
 
 use std::path::PathBuf;
-use displaydoc::Display;
+use displaydoc::Display as DisplayDoc;
+use parse_display::{Display, FromStr};
 use thiserror::Error;
-use clap::{AppSettings, Parser, Subcommand};
+use clap::{AppSettings, Parser};
 
 use crate::{block, Blocks, program::{self, display_program, read_program}};
 
@@ -32,28 +33,24 @@ use crate::{block, Blocks, program::{self, display_program, read_program}};
 #[clap(setting(AppSettings::SubcommandRequiredElseHelp))]
 #[clap(author, version, about)]
 pub struct Cli {
+    /// The input three-address code source file.
+    input: PathBuf,
     /// The subcommand to execute.
-    #[clap(subcommand)]
-    command: Commands,
+    #[clap(short, long)]
+    target_format: TargetFormat,
 }
 
-/// Supported subcommands.
-#[derive(Subcommand)]
-pub enum Commands {
+/// Supported target formats.
+#[derive(Debug, Display, FromStr, Eq, PartialEq)]
+pub enum TargetFormat {
     /// Print out the input file unchanged (disregarding whitespaces).
-    Echo {
-        /// The input three-address code source file.
-        input: PathBuf
-    },
+    Echo,
     /// Partition the input file as basic blocks.
-    Blocks {
-        /// The input three-address code source file.
-        input: PathBuf
-    },
+    Blocks,
 }
 
 /// All kinds of errors that might happen during command line execution.
-#[derive(Debug, Display, Error)]
+#[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
     /// "errors" from [`clap`], including requests such as `--version` or `--help`.
     #[displaydoc("{0}")]
@@ -75,15 +72,13 @@ impl Cli {
     /// Run the command line interface.
     pub fn run() -> Result {
         let options: Cli = Cli::try_parse()?;
-        match options.command {
-            Commands::Echo { input } => {
-                let contents = std::fs::read_to_string(&input)?;
-                let program = read_program(&contents)?;
+        let contents = std::fs::read_to_string(&options.input)?;
+        let program = read_program(&contents)?;
+        match options.target_format {
+            TargetFormat::Echo => {
                 println!("{}", display_program(&program)?)
             }
-            Commands::Blocks { input } => {
-                let contents = std::fs::read_to_string(&input)?;
-                let program = read_program(&contents)?;
+            TargetFormat::Blocks => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 println!("{}", blocks);
             }
