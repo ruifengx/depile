@@ -34,6 +34,61 @@ impl<'a> Block<'a> {
     }
 }
 
+/// Successor blocks.
+pub type SuccBlocks = Either<[usize; 1], [usize; 2]>;
+
+/// Any program structure with a control flow.
+pub trait ControlFlow {
+    /// Get all the blocks as a slice.
+    fn blocks(&self) -> &[Block];
+    /// To which block this instruction index belongs?
+    fn parent_block_of(&self, entry: usize) -> usize;
+
+    /// Which blocks are following this one (in the control flow graph)?
+    fn successor_blocks(&self, block: &Block) -> SuccBlocks {
+        match block.instructions.last().unwrap() {
+            Instr::Branch { method: BranchKind::Unconditional, dest } => Either::Left([*dest]),
+            Instr::Branch { method: BranchKind::If(_) | BranchKind::Unless(_), dest } =>
+                Either::Right([*dest, self.parent_block_of(block.last_index() + 1)]),
+            _ => Either::Left([self.parent_block_of(block.last_index() + 1)]),
+        }
+    }
+
+    /// Collect all the blocks reachable from the given block into an existing set.
+    fn collect_reachable_into(&self, entry: usize, result: &mut BTreeSet<usize>) {
+        let k = self.parent_block_of(entry);
+        let block = self.blocks()[k];
+        result.insert(k);
+        match block.instructions.last().unwrap() {
+            Instr::Branch { method: BranchKind::Unconditional, dest } =>
+                self.collect_reachable_into(*dest, result),
+            Instr::Branch { method: BranchKind::If(_) | BranchKind::Unless(_), dest } => {
+                self.collect_reachable_into(*dest, result);
+                let fallthrough = self.parent_block_of(block.last_index() + 1);
+                self.collect_reachable_into(fallthrough, result);
+            }
+            _ => {
+                let fallthrough = self.parent_block_of(block.last_index() + 1);
+                self.collect_reachable_into(fallthrough, result);
+            }
+        }
+    }
+
+    /// Calculate all the blocks reachable from the given block.
+    fn collect_reachable(&self, block_idx: usize) -> Vec<usize> {
+        let mut result = BTreeSet::new();
+        self.collect_reachable_into(block_idx, &mut result);
+        result.into_iter().collect()
+    }
+}
+
+impl<'a> ControlFlow for Blocks<'a> {
+    fn blocks(&self) -> &[Block] { &self.blocks }
+    fn parent_block_of(&self, instr_idx: usize) -> usize {
+        self.blocks.partition_point(|block| block.index_range().contains(&instr_idx))
+    }
+}
+
 /// A function.
 pub struct Function<'a> {
     /// All the basic blocks in the whole program.
@@ -42,45 +97,12 @@ pub struct Function<'a> {
     pub relevant_blocks: Vec<usize>,
 }
 
-impl<'a> Function<'a> {
-    /// Which blocks are following this one (in the control flow graph)?
-    pub fn successor_blocks(self, block: &Block) -> Either<[usize; 1], [usize; 2]> {
-        match block.instructions.last().unwrap() {
-            Instr::Branch { method: BranchKind::Unconditional, dest } => Either::Left([*dest]),
-            Instr::Branch { method: BranchKind::If(_) | BranchKind::Unless(_), dest } =>
-                Either::Right([*dest, self.all_blocks.parent_block_of(block.last_index() + 1)]),
-            _ => Either::Left([self.all_blocks.parent_block_of(block.last_index() + 1)]),
-        }
-    }
+impl<'a> ControlFlow for Function<'a> {
+    fn blocks(&self) -> &[Block] { self.all_blocks.blocks() }
+    fn parent_block_of(&self, entry: usize) -> usize { self.all_blocks.parent_block_of(entry) }
 }
 
 impl<'a> Blocks<'a> {
-    fn collect_reachable_impl(&self, entry: usize, result: &mut BTreeSet<usize>) {
-        let k = self.parent_block_of(entry);
-        let block = self.blocks[k];
-        result.insert(k);
-        match block.instructions.last().unwrap() {
-            Instr::Branch { method: BranchKind::Unconditional, dest } =>
-                self.collect_reachable_impl(*dest, result),
-            Instr::Branch { method: BranchKind::If(_) | BranchKind::Unless(_), dest } => {
-                self.collect_reachable_impl(*dest, result);
-                let fallthrough = self.parent_block_of(block.last_index() + 1);
-                self.collect_reachable_impl(fallthrough, result);
-            }
-            _ => {
-                let fallthrough = self.parent_block_of(block.last_index() + 1);
-                self.collect_reachable_impl(fallthrough, result);
-            }
-        }
-    }
-
-    /// Calculate all the blocks reachable from the given block.
-    pub fn collect_reachable(&self, block_idx: usize) -> Vec<usize> {
-        let mut result = BTreeSet::new();
-        self.collect_reachable_impl(block_idx, &mut result);
-        result.into_iter().collect()
-    }
-
     /// Split the basic blocks into functions.
     pub fn functions(&self) -> Vec<Function> {
         self.blocks.iter().copied()

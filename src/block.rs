@@ -96,13 +96,6 @@ pub struct Blocks<'a> {
     pub entry_block: usize,
 }
 
-impl<'a> Blocks<'a> {
-    /// Get the parent block index from an instruction index.
-    pub fn parent_block_of(&self, instr_idx: usize) -> usize {
-        self.blocks.partition_point(|block| block.index_range().contains(&instr_idx))
-    }
-}
-
 impl<'a> TryFrom<&'a Program> for Blocks<'a> {
     type Error = Error;
     /// Partition the [`Program`] into basic [`Block`]s.
