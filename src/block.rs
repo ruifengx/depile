@@ -125,10 +125,10 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
             };
 
             macro_rules! check {
-            ($($operand : expr),+ $(,)?) => {
-                check_operand(&[$($operand),+])
+                ($($operand : expr),+ $(,)?) => {
+                    check_operand(&[$($operand),+])
+                }
             }
-        }
 
             match instr {
                 // validate register access
