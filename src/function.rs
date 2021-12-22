@@ -19,7 +19,7 @@
 //! Reconstruct functions from basic blocks.
 
 use std::collections::BTreeSet;
-use either::Either;
+use smallvec::{smallvec, SmallVec};
 use crate::{Instr, instr::BranchKind, Block, Blocks};
 
 impl<'a> Block<'a> {
@@ -35,7 +35,26 @@ impl<'a> Block<'a> {
 }
 
 /// Successor blocks.
-pub type SuccBlocks = Either<[usize; 1], [usize; 2]>;
+pub enum NextBlocks {
+    /// Control flow terminates here: block ends with an [`Instr::Ret`].
+    Terminated,
+    /// Control flow is continuous: block ends with an unconditional branch, or a normal instruction.
+    Continuous(usize),
+    /// Control flow branches here: block ends with a conditional branch.
+    Branching(usize, usize),
+}
+
+impl IntoIterator for NextBlocks {
+    type Item = usize;
+    type IntoIter = smallvec::IntoIter<[usize; 2]>;
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            NextBlocks::Terminated => SmallVec::new(),
+            NextBlocks::Continuous(m) => smallvec![m],
+            NextBlocks::Branching(m, n) => smallvec![m, n],
+        }.into_iter()
+    }
+}
 
 /// Any program structure with a control flow.
 pub trait ControlFlow {
@@ -45,31 +64,23 @@ pub trait ControlFlow {
     fn parent_block_of(&self, entry: usize) -> usize;
 
     /// Which blocks are following this one (in the control flow graph)?
-    fn successor_blocks(&self, block: &Block) -> SuccBlocks {
+    fn successor_blocks(&self, block: Block) -> NextBlocks {
         match block.instructions.last().unwrap() {
-            Instr::Branch { method: BranchKind::Unconditional, dest } => Either::Left([*dest]),
+            Instr::Ret(_) => NextBlocks::Terminated,
+            Instr::Branch { method: BranchKind::Unconditional, dest } => NextBlocks::Continuous(*dest),
             Instr::Branch { method: BranchKind::If(_) | BranchKind::Unless(_), dest } =>
-                Either::Right([*dest, self.parent_block_of(block.last_index() + 1)]),
-            _ => Either::Left([self.parent_block_of(block.last_index() + 1)]),
+                NextBlocks::Branching(*dest, block.last_index() + 1 + 1),
+            _ => NextBlocks::Continuous(block.last_index() + 1 + 1),
         }
     }
 
     /// Collect all the blocks reachable from the given block into an existing set.
     fn collect_reachable_into(&self, entry: usize, result: &mut BTreeSet<usize>) {
         let k = self.parent_block_of(entry);
-        let block = self.blocks()[k];
-        result.insert(k);
-        match block.instructions.last().unwrap() {
-            Instr::Branch { method: BranchKind::Unconditional, dest } =>
-                self.collect_reachable_into(*dest, result),
-            Instr::Branch { method: BranchKind::If(_) | BranchKind::Unless(_), dest } => {
-                self.collect_reachable_into(*dest, result);
-                let fallthrough = self.parent_block_of(block.last_index() + 1);
-                self.collect_reachable_into(fallthrough, result);
-            }
-            _ => {
-                let fallthrough = self.parent_block_of(block.last_index() + 1);
-                self.collect_reachable_into(fallthrough, result);
+        if k >= self.blocks().len() { return; }
+        if result.insert(k) {
+            for n in self.successor_blocks(self.blocks()[k]) {
+                self.collect_reachable_into(n, result);
             }
         }
     }
@@ -77,7 +88,8 @@ pub trait ControlFlow {
     /// Calculate all the blocks reachable from the given block.
     fn collect_reachable(&self, block_idx: usize) -> Vec<usize> {
         let mut result = BTreeSet::new();
-        self.collect_reachable_into(block_idx, &mut result);
+        let instr_idx = self.blocks()[block_idx].first_index + 1;
+        self.collect_reachable_into(instr_idx, &mut result);
         result.into_iter().collect()
     }
 }
@@ -85,7 +97,7 @@ pub trait ControlFlow {
 impl<'a> ControlFlow for Blocks<'a> {
     fn blocks(&self) -> &[Block] { &self.blocks }
     fn parent_block_of(&self, instr_idx: usize) -> usize {
-        self.blocks.partition_point(|block| block.index_range().contains(&instr_idx))
+        self.blocks.partition_point(|block| block.first_index + 1 < instr_idx)
     }
 }
 
@@ -113,5 +125,15 @@ impl<'a> Blocks<'a> {
                 relevant_blocks: self.collect_reachable(k),
             })
             .collect()
+    }
+}
+
+impl<'a> std::fmt::Display for Function<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for &k in &self.relevant_blocks {
+            writeln!(f, "Block #{}:", k)?;
+            writeln!(f, "{}", self.all_blocks.blocks[k])?;
+        }
+        Ok(())
     }
 }

@@ -34,7 +34,7 @@ pub struct Cli {
     #[clap(parse(from_os_str))]
     input: PathBuf,
     /// Output format.
-    #[clap(short, long, arg_enum, default_value_t = Format::Blocks)]
+    #[clap(short, long, arg_enum, default_value_t = Format::Functions)]
     target: Format,
 }
 
@@ -46,6 +46,8 @@ pub enum Format {
     Echo,
     /// Partition the input file as basic blocks.
     Blocks,
+    /// Partition the input file as basic blocks, and group the basic blocks into functions.
+    Functions,
 }
 
 /// All kinds of errors that might happen during command line execution.
@@ -80,6 +82,14 @@ impl Cli {
             Format::Blocks => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 println!("{}", blocks);
+            }
+            Format::Functions => {
+                let blocks = Blocks::try_from(program.as_ref())?;
+                let functions = blocks.functions();
+                for (k, func) in functions.into_iter().enumerate() {
+                    println!("Function #{}:", k);
+                    println!("{}", func);
+                }
             }
         }
         Ok(())

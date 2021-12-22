@@ -47,6 +47,15 @@ impl<'a> Block<'a> {
     }
 }
 
+impl<'a> std::fmt::Display for Block<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (n, instr) in (self.first_index + 1..).zip(self.instructions) {
+            writeln!(f, "  instr {}: {}", n, instr)?;
+        }
+        Ok(())
+    }
+}
+
 /// Program validation error during conversion to a series of basic blocks.
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -89,6 +98,7 @@ pub enum Error {
 }
 
 /// Collection of basic blocks for a [`Program`].
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Blocks<'a> {
     /// List of basic blocks, in ascending order for instruction index.
     pub blocks: Vec<Block<'a>>,
@@ -142,6 +152,7 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
                 // validate `entrypc`
                 Instr::EntryPc => {
                     entries.push(k);
+                    is_leader[k] = true;
                     let next = &program[k + 1];
                     if !matches!(next, Instr::EnterProc(_)) {
                         return Err(Error::InvalidEntry {
@@ -192,15 +203,10 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
 
 impl<'a> std::fmt::Display for Blocks<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut n = 0;
         for (k, &block) in self.blocks.iter().enumerate() {
             if k == self.entry_block { write!(f, "(ENTRY) ")?; }
             writeln!(f, "Block #{}:", k)?;
-            for instr in block.instructions {
-                n += 1;
-                writeln!(f, "  instr {}: {}", n, instr)?;
-            }
-            writeln!(f)?;
+            writeln!(f, "{}", block)?;
         }
         Ok(())
     }
