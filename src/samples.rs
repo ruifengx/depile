@@ -18,16 +18,27 @@
 
 #![allow(unused)]
 
+macro_rules! count {
+    () => { 0 };
+    ($x: tt $(, $xs: tt)*) => { 1 + count!($($xs),*) }
+}
+macro_rules! include_sample {
+    ($name: ident) => {
+        pub const $name: &str = include_str!(concat!("samples/", stringify!($name), ".txt"));
+    }
+}
 macro_rules! include_samples {
     ($($name: ident),+ $(,)?) => {
         $(
             pub const $name: &str = include_str!(concat!("samples/", stringify!($name), ".txt"));
         )+
+        pub const ALL_SAMPLES: [&str; count!($($name),+)] = [$($name),+];
     }
 }
 
+// SIMPLE does not have an entry point, so not suitable for most tests.
+include_sample!(SIMPLE);
 include_samples! {
-    SIMPLE,
     COLLATZ,
     GCD,
     HANOIFIBFAC,

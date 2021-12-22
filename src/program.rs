@@ -88,11 +88,11 @@ mod tests {
 
     #[test]
     fn test_program() {
-        fn test_roundtrip(source: &str) {
-            let program = read_program(source).unwrap();
+        for input in std::iter::once(samples::SIMPLE).chain(samples::ALL_SAMPLES) {
+            let program = read_program(input).unwrap();
             let printed = display_program(&program).unwrap();
-            assert_equal(source.lines().filter(|l| !l.is_empty()), printed.lines());
+            let trimmed = input.lines().filter(|l| !l.is_empty()).map(str::trim);
+            assert_equal(printed.lines(), trimmed);
         }
-        test_roundtrip(samples::SIMPLE);
     }
 }

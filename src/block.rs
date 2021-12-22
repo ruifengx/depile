@@ -214,17 +214,17 @@ impl<'a> std::fmt::Display for Blocks<'a> {
 
 #[cfg(test)]
 mod tests {
-    use itertools::Itertools;
     use super::Blocks;
     use crate::samples;
     use crate::program::read_program;
 
     #[test]
     fn test_blocks_from_program() {
-        let program = read_program(samples::GCD).unwrap();
-        let blocks = Blocks::try_from(program.as_ref()).unwrap();
-        assert_eq!(blocks.blocks.iter().map(|b| b.instructions.len()).collect_vec(),
-                   vec![1, 1, 2, 9, 3, 1, 33, 1]);
-        assert_eq!(blocks.entry_block, 6);
+        for input in samples::ALL_SAMPLES {
+            let program = read_program(input).unwrap();
+            let blocks = Blocks::try_from(program.as_ref()).unwrap();
+            // to avoid optimizations messing up our tests
+            assert!(!blocks.blocks.is_empty());
+        }
     }
 }

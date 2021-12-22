@@ -137,3 +137,21 @@ impl<'a> std::fmt::Display for Function<'a> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Blocks;
+    use crate::samples;
+    use crate::program::read_program;
+
+    #[test]
+    fn test_blocks_into_functions() {
+        for input in samples::ALL_SAMPLES {
+            let program = read_program(input).unwrap();
+            let blocks = Blocks::try_from(program.as_ref()).unwrap();
+            let functions = blocks.functions();
+            // to avoid optimizations messing up our tests
+            assert!(!functions.is_empty());
+        }
+    }
+}
