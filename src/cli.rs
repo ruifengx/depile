@@ -43,7 +43,7 @@ pub struct Cli {
 #[display(style = "snake_case")]
 pub enum Format {
     /// Print out the input file unchanged (disregarding whitespaces).
-    Echo,
+    Raw,
     /// Partition the input file as basic blocks.
     Blocks,
     /// Partition the input file as basic blocks, and group the basic blocks into functions.
@@ -76,7 +76,7 @@ impl Cli {
         let contents = std::fs::read_to_string(&options.input)?;
         let program = read_program(&contents)?;
         match options.target {
-            Format::Echo => {
+            Format::Raw => {
                 println!("{}", display_program(&program)?)
             }
             Format::Blocks => {
