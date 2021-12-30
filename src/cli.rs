@@ -24,7 +24,7 @@ use parse_display::{Display, FromStr};
 use thiserror::Error;
 use clap::{Parser, ArgEnum};
 
-use crate::{block, Blocks, program::{self, display_program, read_program}};
+use crate::{block, Blocks, function, program::{self, display_program, read_program}};
 
 /// Entry to the command line interface.
 #[derive(Parser)]
@@ -58,8 +58,10 @@ pub enum Error {
     InvalidArguments(#[from] clap::Error),
     /// parse error: {0}
     InvalidInput(#[from] program::ParseError),
-    /// malformed program: {0}
-    MalformedInput(#[from] block::Error),
+    /// failed to parse into basic blocks: {0}
+    MalformedBlocks(#[from] block::Error),
+    /// failed to group into functions: {0}
+    MalformedFunctions(#[from] function::Error),
     /// failed to read file: {0}
     Io(#[from] std::io::Error),
     /// cannot format the output: {0}
@@ -85,10 +87,9 @@ impl Cli {
             }
             Format::Functions => {
                 let blocks = Blocks::try_from(program.as_ref())?;
-                let functions = blocks.functions();
+                let functions = blocks.functions()?;
                 for (k, func) in functions.into_iter().enumerate() {
-                    println!("Function #{}:", k);
-                    println!("{}", func);
+                    println!("#{} {}", k, func);
                 }
             }
         }

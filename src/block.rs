@@ -45,6 +45,10 @@ impl<'a> Block<'a> {
     pub fn index_range(self) -> RangeInclusive<usize> {
         self.first_index..=self.last_index()
     }
+    /// Get iterator into instructions with indices.
+    pub fn indexed_instructions(self) -> impl Iterator<Item=(usize, &'a Instr)> {
+        (self.first_index..).zip(self.instructions)
+    }
 }
 
 impl<'a> std::fmt::Display for Block<'a> {

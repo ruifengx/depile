@@ -19,6 +19,8 @@
 //! Reconstruct functions from basic blocks.
 
 use std::collections::BTreeSet;
+use itertools::Itertools;
+use thiserror::Error;
 use smallvec::{smallvec, SmallVec};
 use crate::{Instr, instr::BranchKind, Block, Blocks};
 
@@ -57,9 +59,11 @@ impl IntoIterator for NextBlocks {
 }
 
 /// Any program structure with a control flow.
-pub trait ControlFlow {
+pub trait ControlFlow<'a> {
+    /// Get all blocks in this control flow.
+    fn blocks<'r>(&'r self) -> Box<dyn Iterator<Item=&'r Block> + 'r> where 'a: 'r;
     /// Get all the blocks as a slice.
-    fn blocks(&self) -> &[Block];
+    fn all_blocks(&self) -> &[Block];
     /// To which block this instruction index belongs?
     fn parent_block_of(&self, entry: usize) -> usize;
 
@@ -77,9 +81,9 @@ pub trait ControlFlow {
     /// Collect all the blocks reachable from the given block into an existing set.
     fn collect_reachable_into(&self, entry: usize, result: &mut BTreeSet<usize>) {
         let k = self.parent_block_of(entry);
-        if k >= self.blocks().len() { return; }
+        if k >= self.all_blocks().len() { return; }
         if result.insert(k) {
-            for n in self.successor_blocks(self.blocks()[k]) {
+            for n in self.successor_blocks(self.all_blocks()[k]) {
                 self.collect_reachable_into(n, result);
             }
         }
@@ -88,14 +92,16 @@ pub trait ControlFlow {
     /// Calculate all the blocks reachable from the given block.
     fn collect_reachable(&self, block_idx: usize) -> Vec<usize> {
         let mut result = BTreeSet::new();
-        let instr_idx = self.blocks()[block_idx].first_index + 1;
+        let instr_idx = self.all_blocks()[block_idx].first_index + 1;
         self.collect_reachable_into(instr_idx, &mut result);
         result.into_iter().collect()
     }
 }
 
-impl<'a> ControlFlow for Blocks<'a> {
-    fn blocks(&self) -> &[Block] { &self.blocks }
+impl<'a> ControlFlow<'a> for Blocks<'a> {
+    fn blocks<'r>(&'r self) -> Box<dyn Iterator<Item=&'r Block> + 'r>
+        where 'a: 'r { Box::new(self.blocks.iter()) }
+    fn all_blocks(&self) -> &[Block] { &self.blocks }
     fn parent_block_of(&self, instr_idx: usize) -> usize {
         self.blocks.partition_point(|block| block.first_index + 1 < instr_idx)
     }
@@ -103,26 +109,76 @@ impl<'a> ControlFlow for Blocks<'a> {
 
 /// A function.
 pub struct Function<'a> {
+    /// Number of formal parameters.
+    pub parameter_count: u64,
     /// All the basic blocks in the whole program.
     pub all_blocks: &'a Blocks<'a>,
     /// All relevant basic blocks in this function.
     pub relevant_blocks: Vec<usize>,
 }
 
-impl<'a> ControlFlow for Function<'a> {
-    fn blocks(&self) -> &[Block] { self.all_blocks.blocks() }
+impl<'a> ControlFlow<'a> for Function<'a> {
+    fn blocks<'r>(&'r self) -> Box<dyn Iterator<Item=&'r Block> + 'r> where 'a: 'r {
+        Box::new(self.relevant_blocks
+            .iter().copied()
+            .map(|k| &self.all_blocks()[k]))
+    }
+    fn all_blocks(&self) -> &[Block] { self.all_blocks.all_blocks() }
     fn parent_block_of(&self, entry: usize) -> usize { self.all_blocks.parent_block_of(entry) }
+}
+
+/// Program validation error during conversion to a series of basic blocks.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Multiple [`Instr::Ret`] instructions don't agree with each other on number of arguments.
+    InconsistentRets(Vec<(usize, u64)>),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::InconsistentRets(rets) => {
+                writeln!(f, "inconsistent `ret` instructions:")?;
+                for (k, arg_bytes) in rets {
+                    write!(f, "- instr {}: ret {}", k, arg_bytes)?;
+                    if arg_bytes % 8 != 0 {
+                        writeln!(f, " (not a multiple of 8)")?;
+                    } else {
+                        writeln!(f)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<'a> Blocks<'a> {
     /// Split the basic blocks into functions.
-    pub fn functions(&self) -> Vec<Function> {
+    pub fn functions(&self) -> Result<Vec<Function>, Error> {
         self.blocks.iter().copied()
             .enumerate()
             .filter(|(_, block)| block.is_function_entry())
             .map(|(k, _)| Function {
+                parameter_count: 0, // to be changed
                 all_blocks: self,
                 relevant_blocks: self.collect_reachable(k),
+            })
+            .map(|func| {
+                let ks = func.blocks()
+                    .map(|block| block.indexed_instructions().last().unwrap())
+                    .filter_map(|instr| match instr {
+                        (k, Instr::Ret(n_args)) => Some((k, *n_args)),
+                        _ => None,
+                    }).collect_vec();
+                assert_ne!(ks.len(), 0);
+                let (_, parameter_bytes) = ks[0];
+                if ks.iter().all(|&(_, k)| k == parameter_bytes && k % 8 == 0) {
+                    let parameter_count = parameter_bytes / 8;
+                    Ok(Function { parameter_count, ..func })
+                } else {
+                    Err(Error::InconsistentRets(ks))
+                }
             })
             .collect()
     }
@@ -130,6 +186,7 @@ impl<'a> Blocks<'a> {
 
 impl<'a> std::fmt::Display for Function<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Function with {} parameters:", self.parameter_count)?;
         for &k in &self.relevant_blocks {
             writeln!(f, "Block #{}:", k)?;
             writeln!(f, "{}", self.all_blocks.blocks[k])?;
@@ -149,7 +206,7 @@ mod tests {
         for input in samples::ALL_SAMPLES {
             let program = read_program(input).unwrap();
             let blocks = Blocks::try_from(program.as_ref()).unwrap();
-            let functions = blocks.functions();
+            let functions = blocks.functions().unwrap();
             // to avoid optimizations messing up our tests
             assert!(!functions.is_empty());
         }
