@@ -121,13 +121,11 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
                 for x in xs {
                     if let Operand::Register(r) = x {
                         let target = &program[*r - 1];
-                        match target {
-                            Instr::Binary { .. } | Instr::Unary { .. }
-                            | Instr::Load(_) | Instr::Move { .. } | Instr::Read(_) => {}
-                            _ => return Err(Error::InvalidReference {
+                        if !target.has_output() {
+                            return Err(Error::InvalidReference {
                                 source_instr: SourceLine { index: k, instr: instr.clone() },
                                 target_instr: SourceLine { index: *r, instr: target.clone() },
-                            }),
+                            });
                         }
                     }
                 }

@@ -135,6 +135,14 @@ pub enum Instr {
     Nop,
 }
 
+impl Instr {
+    /// Is the register `rk` properly defined after this instruction `k`?
+    pub fn has_output(&self) -> bool {
+        matches!(self, Instr::Binary { .. } | Instr::Unary { .. } |
+            Instr::Load(_) | Instr::Move { .. } | Instr::Read(_))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BOp, BranchKind, Instr, Operand, UOp};
