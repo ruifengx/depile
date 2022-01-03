@@ -147,7 +147,6 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
                 Instr::Binary { lhs, rhs, .. } => check!(lhs, rhs)?,
                 Instr::Unary { operand, .. } => check!(operand)?,
                 Instr::Load(operand) => check!(operand)?,
-                Instr::Read(operand) => check!(operand)?,
                 Instr::Store { data, address } => check!(data, address)?,
                 Instr::Write(operand) => check!(operand)?,
                 Instr::PushParam(operand) => check!(operand)?,

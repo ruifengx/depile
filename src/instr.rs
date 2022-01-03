@@ -99,8 +99,10 @@ pub enum Instr {
         method: BranchKind,
         dest: usize,
     },
+    /// Pointer dereference.
     #[display("load {0}")]
     Load(Operand),
+    /// Pointer dereference and assign.
     #[display("store {data} {address}")]
     Store {
         data: Operand,
@@ -112,8 +114,8 @@ pub enum Instr {
         dest: Operand,
     },
     /// Defined as `scanf("%lld", &x);` in C.
-    #[display("read {0}")]
-    Read(Operand),
+    #[display("read")]
+    Read,
     /// Defined as `printf(" %lld", x);` in C.
     #[display("write {0}")]
     Write(Operand),
@@ -139,7 +141,7 @@ impl Instr {
     /// Is the register `rk` properly defined after this instruction `k`?
     pub fn has_output(&self) -> bool {
         matches!(self, Instr::Binary { .. } | Instr::Unary { .. } |
-            Instr::Load(_) | Instr::Move { .. } | Instr::Read(_))
+            Instr::Load(_) | Instr::Move { .. } | Instr::Read)
     }
 }
 
@@ -201,7 +203,7 @@ mod tests {
                 address: Operand::Register(11),
             },
             // input & output
-            "read x#-64" => Instr::Read(Operand::Offset("x".to_string(), -64)),
+            "read" => Instr::Read,
             "write x#-64" => Instr::Write(Operand::Offset("x".to_string(), -64)),
             "wrl" => Instr::WriteLn,
             // function related
