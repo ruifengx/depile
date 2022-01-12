@@ -18,25 +18,9 @@
 
 //! Instructions for three-address code.
 
-use parse_display::{Display, FromStr};
+pub mod basic;
 
-/// Operands to all the [`Instr`]uctions.
-#[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Operand {
-    /// Global pointer.
-    GP,
-    /// Frame pointer.
-    FP,
-    /// Integer literal.
-    #[display("{0}")]
-    Const(i64),
-    /// Global offset, field offset, or stack offset.
-    #[display("{0}#{1}")]
-    Offset(String, i64),
-    /// Virtual register for instruction outputs.
-    #[display("({0})")]
-    Register(usize),
-}
+use parse_display::{Display, FromStr};
 
 /// Binary operators.
 #[derive(Debug, Display, FromStr, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -64,22 +48,20 @@ pub enum UOp {
 /// Branching methods.
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[allow(missing_docs)]
-pub enum BranchKind {
+pub enum BranchKind<Operand> {
     #[display("br")]
     Unconditional,
     #[display("blbs {0}")]
     If(Operand),
     #[display("blbc {0}")]
     Unless(Operand),
-    #[display(style = "lowercase")]
-    Call,
 }
 
 /// Instructions.
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[allow(missing_docs)]
 #[display(style = "lowercase")]
-pub enum Instr {
+pub enum Instr<Operand, Marker, InterProc, Extra> {
     /// Binary operations.
     #[display("{op} {lhs} {rhs}")]
     Binary {
@@ -96,7 +78,7 @@ pub enum Instr {
     /// Branching operations.
     #[display("{method} [{dest}]")]
     Branch {
-        method: BranchKind,
+        method: BranchKind<Operand>,
         dest: usize,
     },
     /// Pointer dereference.
@@ -122,22 +104,19 @@ pub enum Instr {
     /// Defined as `printf("\n");` in C.
     #[display("wrl")]
     WriteLn,
-    #[display("param {0}")]
-    PushParam(Operand),
-    /// Denotes the beginning of a function. Its operand `{0}` specifies the amount of memory in
-    /// bytes to be allocated on the stack frame for local variables of that function.
-    #[display("enter {0}")]
-    EnterProc(u64),
-    /// Denotes a function return. Its operand `{0}` specifies the amount of memory for formal
-    /// parameters that needs to be removed (popped) from the stack.
-    #[display("ret {0}")]
-    Ret(u64),
-    /// Denotes the beginning of the `main` function.
-    EntryPc,
+    /// Inter-procedural (function call related) instruction.
+    #[display("{0}")]
+    InterProc(InterProc),
     Nop,
+    /// Marker instructions.
+    #[display("{0}")]
+    Marker(Marker),
+    /// Other instructions.
+    #[display("{0}")]
+    Extra(Extra),
 }
 
-impl Instr {
+impl<Operand, Marker, InterProc, Extra> Instr<Operand, Marker, InterProc, Extra> {
     /// Is the register `rk` properly defined after this instruction `k`?
     pub fn has_output(&self) -> bool {
         matches!(self, Instr::Binary { .. } | Instr::Unary { .. } |
@@ -147,7 +126,8 @@ impl Instr {
 
 #[cfg(test)]
 mod tests {
-    use super::{BOp, BranchKind, Instr, Operand, UOp};
+    use super::{BOp, UOp};
+    use super::basic::{BranchKind, Instr, InterProc, Marker, Operand};
 
     macro_rules! assert_equiv {
         ($($str: expr => $val: expr),+ $(,)?) => {
@@ -188,10 +168,9 @@ mod tests {
                 method: BranchKind::If(Operand::Register(36)),
                 dest: 46,
             },
-            "call [23]" => Instr::Branch {
-                method: BranchKind::Call,
-                dest: 23
-            },
+            // inter-procedural
+            "call [23]" => Instr::InterProc(InterProc::Call { dest: 23 }),
+            "param (59)" => Instr::InterProc(InterProc::PushParam(Operand::Register(59))),
             // moving
             "load (13)" => Instr::Load(Operand::Register(13)),
             "move i#-8 j#-16" => Instr::Move {
@@ -206,11 +185,10 @@ mod tests {
             "read" => Instr::Read,
             "write x#-64" => Instr::Write(Operand::Offset("x".to_string(), -64)),
             "wrl" => Instr::WriteLn,
-            // function related
-            "entrypc" => Instr::EntryPc,
-            "enter 8" => Instr::EnterProc(8),
-            "ret 0" => Instr::Ret(0),
-            "param (59)" => Instr::PushParam(Operand::Register(59)),
+            // function related markups
+            "entrypc" => Instr::Marker(Marker::EntryPc),
+            "enter 8" => Instr::Marker(Marker::EnterProc(8)),
+            "ret 0" => Instr::Marker(Marker::Ret(0)),
         }
     }
 }

@@ -23,10 +23,10 @@
 
 #![warn(missing_docs)]
 
-use depile::Cli;
+// use depile::Cli;
 
 fn main() {
-    if let Err(err) = Cli::run() {
-        eprintln!("{}", err);
-    }
+    // if let Err(err) = Cli::run() {
+    //     eprintln!("{}", err);
+    // }
 }

@@ -134,7 +134,7 @@ pub enum Error {
     InconsistentRets(Vec<(usize, u64)>),
 }
 
-impl std::fmt::Display for Error {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::InconsistentRets(rets) => {
@@ -184,7 +184,7 @@ impl<'a> Blocks<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for Function<'a> {
+impl<'a> Display for Function<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Function with {} parameters:", self.parameter_count)?;
         for &k in &self.relevant_blocks {

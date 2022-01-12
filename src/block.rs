@@ -18,42 +18,47 @@
 
 //! Basic blocks, and related API.
 
+use std::fmt::Display;
 use std::ops::RangeInclusive;
 use itertools::Itertools;
 use thiserror::Error;
 use displaydoc::Display;
 
-use crate::instr::{BranchKind, Operand};
+use crate::instr::basic;
 use crate::program::SourceLine;
 use super::{Instr, Program};
 
 /// Basic block.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct Block<'a> {
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Block<Operand, Marker, InterProc, Extra> {
     /// Index of the first instruction.
     pub first_index: usize,
     /// All the instructions in this basic block.
-    pub instructions: &'a [Instr],
+    pub instructions: Box<[Instr<Operand, Marker, InterProc, Extra>]>,
 }
 
-impl<'a> Block<'a> {
+impl<Operand, Marker, InterProc, Extra> Block<Operand, Marker, InterProc, Extra> {
     /// Index of the last instruction.
-    pub fn last_index(self) -> usize {
+    pub fn last_index(&self) -> usize {
         self.first_index + self.instructions.len() - 1
     }
     /// Range of the indices of instructions in this basic block.
-    pub fn index_range(self) -> RangeInclusive<usize> {
+    pub fn index_range(&self) -> RangeInclusive<usize> {
         self.first_index..=self.last_index()
     }
     /// Get iterator into instructions with indices.
-    pub fn indexed_instructions(self) -> impl Iterator<Item=(usize, &'a Instr)> {
-        (self.first_index..).zip(self.instructions)
+    pub fn indexed_instructions(&self) -> impl Iterator<Item=(usize, &Instr<Operand, Marker, InterProc, Extra>)> {
+        (self.first_index..).zip(self.instructions.iter())
     }
 }
 
-impl<'a> std::fmt::Display for Block<'a> {
+impl<Operand, Marker, InterProc, Extra> Display for Block<Operand, Marker, InterProc, Extra>
+    where Operand: Display,
+          Marker: Display,
+          InterProc: Display,
+          Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (n, instr) in (self.first_index + 1..).zip(self.instructions) {
+        for (n, instr) in (self.first_index + 1..).zip(self.instructions.iter()) {
             writeln!(f, "  instr {}: {}", n, instr)?;
         }
         Ok(())
@@ -103,17 +108,17 @@ pub enum Error {
 
 /// Collection of basic blocks for a [`Program`].
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Blocks<'a> {
+pub struct Blocks<Operand, Marker, InterProc, Extra> {
     /// List of basic blocks, in ascending order for instruction index.
-    pub blocks: Vec<Block<'a>>,
+    pub blocks: Vec<Block<Operand, Marker, InterProc, Extra>>,
     /// The index of the entry block (marked as `entrypc`).
     pub entry_block: usize,
 }
 
-impl<'a> TryFrom<&'a Program> for Blocks<'a> {
+impl<'a> TryFrom<&'a Program> for basic::Blocks {
     type Error = Error;
     /// Partition the [`Program`] into basic [`Block`]s.
-    fn try_from(program: &Program) -> Result<Blocks, Error> {
+    fn try_from(program: &Program) -> Result<basic::Blocks, Error> {
         let n = program.len();
         let mut is_leader = vec![false; n + 1];
         is_leader[0] = true;
@@ -121,9 +126,9 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
 
         let mut entries = Vec::new();
         for (k, instr) in program.iter().enumerate() {
-            let check_operand = |xs: &[&Operand]| -> Result<(), Error> {
+            let check_operand = |xs: &[&basic::Operand]| -> Result<(), Error> {
                 for x in xs {
-                    if let Operand::Register(r) = x {
+                    if let basic::Operand::Register(r) = x {
                         let target = &program[*r - 1];
                         if !target.has_output() {
                             return Err(Error::InvalidReference {
@@ -149,13 +154,13 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
                 Instr::Load(operand) => check!(operand)?,
                 Instr::Store { data, address } => check!(data, address)?,
                 Instr::Write(operand) => check!(operand)?,
-                Instr::PushParam(operand) => check!(operand)?,
+                Instr::InterProc(basic::InterProc::PushParam(operand)) => check!(operand)?,
                 // validate `entrypc`
-                Instr::EntryPc => {
+                Instr::Marker(basic::Marker::EntryPc) => {
                     entries.push(k);
                     is_leader[k] = true;
                     let next = &program[k + 1];
-                    if !matches!(next, Instr::EnterProc(_)) {
+                    if !matches!(next, Instr::Marker(basic::Marker::EnterProc(_))) {
                         return Err(Error::InvalidEntry {
                             entry_instr: SourceLine { index: k, instr: instr.clone() },
                             following_instr: SourceLine { index: k, instr: next.clone() },
@@ -164,9 +169,9 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
                 }
                 // we decide that a `call` does not partition the basic block, because control
                 // flows are guaranteed to resume later.
-                Instr::Branch { dest, method: BranchKind::Call } => {
+                Instr::InterProc(basic::InterProc::Call { dest }) => {
                     let target = &program[*dest - 1];
-                    if !matches!(target, Instr::EnterProc(_)) {
+                    if !matches!(target, Instr::Marker(basic::Marker::EnterProc(_))) {
                         return Err(Error::CallEnterMismatch {
                             call_instr: SourceLine { index: k, instr: instr.clone() },
                             target_instr: SourceLine { index: *dest, instr: target.clone() },
@@ -177,8 +182,8 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
                     is_leader[*dest - 1] = true;
                     is_leader[k + 1] = true;
                 }
-                Instr::EnterProc(_) => is_leader[k] = true,
-                Instr::Ret(_) => is_leader[k + 1] = true,
+                Instr::Marker(basic::Marker::EnterProc(_)) => is_leader[k] = true,
+                Instr::Marker(basic::Marker::Ret(_)) => is_leader[k + 1] = true,
                 _ => {}
             }
         }
@@ -192,7 +197,7 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
                 .filter(|(_, p)| *p)
                 .map(|(k, _)| k)
                 .tuple_windows()
-                .map(|(l, r)| Block { first_index: l, instructions: &program[l..r] })
+                .map(|(l, r)| Block { first_index: l, instructions: program[l..r].to_vec().into_boxed_slice() })
                 .collect(),
             entry_block: 1 + is_leader.iter().copied()
                 .take(entries[0])
@@ -202,9 +207,13 @@ impl<'a> TryFrom<&'a Program> for Blocks<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for Blocks<'a> {
+impl<Operand, Marker, InterProc, Extra> Display for Blocks<Operand, Marker, InterProc, Extra>
+    where Operand: Display,
+          Marker: Display,
+          InterProc: Display,
+          Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (k, &block) in self.blocks.iter().enumerate() {
+        for (k, block) in self.blocks.iter().enumerate() {
             if k == self.entry_block { write!(f, "(ENTRY) ")?; }
             writeln!(f, "Block #{}:", k)?;
             writeln!(f, "{}", block)?;

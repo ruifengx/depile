@@ -50,13 +50,13 @@
 pub mod instr;
 pub mod program;
 pub mod block;
-pub mod function;
-
-#[cfg(feature = "cli")]
-pub mod cli;
-
-#[cfg(feature = "cli")]
-pub use cli::Cli;
+// pub mod function;
+//
+// #[cfg(feature = "cli")]
+// pub mod cli;
+//
+// #[cfg(feature = "cli")]
+// pub use cli::Cli;
 
 #[cfg(test)]
 mod samples;
@@ -64,4 +64,4 @@ mod samples;
 pub use instr::Instr;
 pub use program::Program;
 pub use block::{Block, Blocks};
-pub use function::{Function, ControlFlow};
+// pub use function::{Function, ControlFlow};

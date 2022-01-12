@@ -22,8 +22,7 @@ use parse_display::{Display, FromStr};
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
 
-use crate::instr::Instr;
-use crate::program::ParseError::InvalidIndex;
+use crate::instr::basic;
 
 /// A single line in the source program.
 ///
@@ -34,7 +33,7 @@ pub struct SourceLine {
     /// A line index `k` as in `instr k:`.
     pub index: usize,
     /// The instruction.
-    pub instr: Instr,
+    pub instr: basic::Instr,
 }
 
 /// Parse error for [`Program`]s.
@@ -52,7 +51,7 @@ pub enum ParseError {
 }
 
 /// A program is a series of [`Instr`]uctions.
-pub type Program = [Instr];
+pub type Program = [basic::Instr];
 
 /// Read from source text to a [`Program`].
 pub fn read_program(text: &str) -> Result<Box<Program>, ParseError> {
@@ -63,7 +62,7 @@ pub fn read_program(text: &str) -> Result<Box<Program>, ParseError> {
         .zip(1..)
         .map(|(line, k)| {
             let SourceLine { index, instr } = line?;
-            if k != index { return Err(InvalidIndex { expected: k, actual: index }); }
+            if k != index { return Err(ParseError::InvalidIndex { expected: k, actual: index }); }
             Ok(instr)
         })
         .collect()
