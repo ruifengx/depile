@@ -18,48 +18,55 @@
 
 //! Basic blocks, and related API.
 
-use std::fmt::Display;
-use std::ops::RangeInclusive;
+use std::fmt::{Debug, Display};
 use itertools::Itertools;
 use thiserror::Error;
 use displaydoc::Display;
+use derivative::Derivative;
 
-use crate::instr::basic;
+use crate::instr::{basic, Branching, HasDest, HasOperand, InstrExt, OutputInfo};
 use crate::program::SourceLine;
 use super::{Instr, Program};
 
 /// Basic block.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Block<Operand, Marker, InterProc, Extra> {
+#[derive(Derivative)]
+#[derivative(Debug(bound = "Kind::Operand: Debug, Kind::Branching: Debug, Kind::Marker: Debug, Kind::InterProc: Debug, Kind::Extra: Debug"))]
+#[derivative(Clone(bound = "Kind::Operand: Clone, Kind::Branching: Clone, Kind::Marker: Clone, Kind::InterProc: Clone, Kind::Extra: Clone"))]
+#[derivative(Eq(bound = "Kind::Operand: Eq, Kind::Branching: Eq, Kind::Marker: Eq, Kind::InterProc: Eq, Kind::Extra: Eq"))]
+#[derivative(PartialEq(bound = "Kind::Operand: PartialEq, Kind::Branching: PartialEq, Kind::Marker: PartialEq, Kind::InterProc: PartialEq, Kind::Extra: PartialEq"))]
+pub struct Block<Kind: InstrExt> {
     /// Index of the first instruction.
     pub first_index: usize,
     /// All the instructions in this basic block.
-    pub instructions: Box<[Instr<Operand, Marker, InterProc, Extra>]>,
+    pub instructions: Box<[Instr<Kind>]>,
 }
 
-impl<Operand, Marker, InterProc, Extra> Block<Operand, Marker, InterProc, Extra> {
+/// Iterator of indexed instructions into a block.
+pub type IndexedInstr<'a, Kind> = std::iter::Zip<
+    std::ops::RangeFrom<usize>,
+    std::slice::Iter<'a, Instr<Kind>>,
+>;
+
+impl<Kind: InstrExt> Block<Kind> {
     /// Index of the last instruction.
     pub fn last_index(&self) -> usize {
         self.first_index + self.instructions.len() - 1
     }
-    /// Range of the indices of instructions in this basic block.
-    pub fn index_range(&self) -> RangeInclusive<usize> {
-        self.first_index..=self.last_index()
-    }
     /// Get iterator into instructions with indices.
-    pub fn indexed_instructions(&self) -> impl Iterator<Item=(usize, &Instr<Operand, Marker, InterProc, Extra>)> {
+    pub fn indexed(&self) -> IndexedInstr<Kind> {
         (self.first_index..).zip(self.instructions.iter())
     }
 }
 
-impl<Operand, Marker, InterProc, Extra> Display for Block<Operand, Marker, InterProc, Extra>
-    where Operand: Display,
-          Marker: Display,
-          InterProc: Display,
-          Extra: Display {
+impl<Kind: InstrExt> Display for Block<Kind>
+    where Kind::Operand: Display,
+          Kind::Branching: Display,
+          Kind::Marker: Display,
+          Kind::InterProc: Display,
+          Kind::Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (n, instr) in (self.first_index + 1..).zip(self.instructions.iter()) {
-            writeln!(f, "  instr {}: {}", n, instr)?;
+        for instr in self.instructions.iter() {
+            writeln!(f, "  {}", instr)?;
         }
         Ok(())
     }
@@ -107,10 +114,14 @@ pub enum Error {
 }
 
 /// Collection of basic blocks for a [`Program`].
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Blocks<Operand, Marker, InterProc, Extra> {
+#[derive(Derivative)]
+#[derivative(Debug(bound = "Kind::Operand: Debug, Kind::Branching: Debug, Kind::Marker: Debug, Kind::InterProc: Debug, Kind::Extra: Debug"))]
+#[derivative(Clone(bound = "Kind::Operand: Clone, Kind::Branching: Clone, Kind::Marker: Clone, Kind::InterProc: Clone, Kind::Extra: Clone"))]
+#[derivative(Eq(bound = "Kind::Operand: Eq, Kind::Branching: Eq, Kind::Marker: Eq, Kind::InterProc: Eq, Kind::Extra: Eq"))]
+#[derivative(PartialEq(bound = "Kind::Operand: PartialEq, Kind::Branching: PartialEq, Kind::Marker: PartialEq, Kind::InterProc: PartialEq, Kind::Extra: PartialEq"))]
+pub struct Blocks<Kind: InstrExt> {
     /// List of basic blocks, in ascending order for instruction index.
-    pub blocks: Vec<Block<Operand, Marker, InterProc, Extra>>,
+    pub blocks: Vec<Block<Kind>>,
     /// The index of the entry block (marked as `entrypc`).
     pub entry_block: usize,
 }
@@ -126,35 +137,19 @@ impl<'a> TryFrom<&'a Program> for basic::Blocks {
 
         let mut entries = Vec::new();
         for (k, instr) in program.iter().enumerate() {
-            let check_operand = |xs: &[&basic::Operand]| -> Result<(), Error> {
-                for x in xs {
-                    if let basic::Operand::Register(r) = x {
-                        let target = &program[*r - 1];
-                        if !target.has_output() {
-                            return Err(Error::InvalidReference {
-                                source_instr: SourceLine { index: k, instr: instr.clone() },
-                                target_instr: SourceLine { index: *r, instr: target.clone() },
-                            });
-                        }
+            for x in instr.get_operands() {
+                if let basic::Operand::Register(r) = x {
+                    let target = &program[*r - 1];
+                    if !target.has_output() {
+                        return Err(Error::InvalidReference {
+                            source_instr: SourceLine { index: k, instr: instr.clone() },
+                            target_instr: SourceLine { index: *r, instr: target.clone() },
+                        });
                     }
-                }
-                Ok(())
-            };
-
-            macro_rules! check {
-                ($($operand : expr),+ $(,)?) => {
-                    check_operand(&[$($operand),+])
                 }
             }
 
             match instr {
-                // validate register access
-                Instr::Binary { lhs, rhs, .. } => check!(lhs, rhs)?,
-                Instr::Unary { operand, .. } => check!(operand)?,
-                Instr::Load(operand) => check!(operand)?,
-                Instr::Store { data, address } => check!(data, address)?,
-                Instr::Write(operand) => check!(operand)?,
-                Instr::InterProc(basic::InterProc::PushParam(operand)) => check!(operand)?,
                 // validate `entrypc`
                 Instr::Marker(basic::Marker::EntryPc) => {
                     entries.push(k);
@@ -178,7 +173,7 @@ impl<'a> TryFrom<&'a Program> for basic::Blocks {
                         });
                     }
                 }
-                Instr::Branch { dest, .. } => {
+                Instr::Branch(Branching { dest, .. }) => {
                     is_leader[*dest - 1] = true;
                     is_leader[k + 1] = true;
                 }
@@ -191,14 +186,23 @@ impl<'a> TryFrom<&'a Program> for basic::Blocks {
         if entries.len() > 1 { return Err(Error::MultipleEntries(entries)); }
         assert!(is_leader[entries[0]] && is_leader[entries[0] + 1]);
 
+        let ranges = is_leader.iter().copied()
+            .enumerate()
+            .filter(|(_, p)| *p)
+            .map(|(k, _)| k)
+            .tuple_windows::<(usize, usize)>()
+            .collect_vec();
+
         Ok(Blocks {
-            blocks: is_leader.iter().copied()
-                .enumerate()
-                .filter(|(_, p)| *p)
-                .map(|(k, _)| k)
-                .tuple_windows()
-                .map(|(l, r)| Block { first_index: l, instructions: program[l..r].to_vec().into_boxed_slice() })
-                .collect(),
+            blocks: ranges.iter().copied()
+                .map(|(l, r)| Block {
+                    instructions: program[l..r].iter().cloned()
+                        .map(|instr| instr.map_dest(|dest|
+                            ranges.partition_point(|(_, r)| *r < dest)))
+                        .collect_vec()
+                        .into_boxed_slice(),
+                    first_index: l,
+                }).collect(),
             entry_block: 1 + is_leader.iter().copied()
                 .take(entries[0])
                 .filter(|&p| p)
@@ -207,11 +211,12 @@ impl<'a> TryFrom<&'a Program> for basic::Blocks {
     }
 }
 
-impl<Operand, Marker, InterProc, Extra> Display for Blocks<Operand, Marker, InterProc, Extra>
-    where Operand: Display,
-          Marker: Display,
-          InterProc: Display,
-          Extra: Display {
+impl<Kind: InstrExt> Display for Blocks<Kind>
+    where Kind::Operand: Display,
+          Kind::Branching: Display,
+          Kind::Marker: Display,
+          Kind::InterProc: Display,
+          Kind::Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (k, block) in self.blocks.iter().enumerate() {
             if k == self.entry_block { write!(f, "(ENTRY) ")?; }

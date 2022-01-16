@@ -18,21 +18,22 @@
 
 //! Reconstruct functions from basic blocks.
 
-use std::collections::BTreeSet;
-use itertools::Itertools;
+use std::collections::{BTreeSet, HashMap};
+use std::fmt::Display;
 use thiserror::Error;
 use smallvec::{smallvec, SmallVec};
-use crate::{Instr, instr::BranchKind, Block, Blocks};
+use crate::{Instr, instr::BranchKind, Block};
+use crate::instr::{basic, Branching, HasDest, stripped};
 
-impl<'a> Block<'a> {
+impl basic::Block {
     /// Whether or not this block is the entry to some function.
-    pub fn is_function_entry(self) -> bool {
-        matches!(self.instructions[0], Instr::EnterProc(_))
+    pub fn is_function_entry(&self) -> bool {
+        matches!(self.instructions[0], Instr::Marker(basic::Marker::EnterProc(_)))
     }
 
-    /// Whether or not this block has a [`Instr::Ret`] as its last instruction.
-    pub fn is_function_return(self) -> bool {
-        matches!(self.instructions.last().unwrap(), Instr::Ret(_))
+    /// Whether or not this block has a [`basic::Marker::Ret`] as its last instruction.
+    pub fn is_function_return(&self) -> bool {
+        matches!(self.instructions.last().unwrap(), Instr::Marker(basic::Marker::Ret(_)))
     }
 }
 
@@ -58,32 +59,24 @@ impl IntoIterator for NextBlocks {
     }
 }
 
-/// Any program structure with a control flow.
-pub trait ControlFlow<'a> {
-    /// Get all blocks in this control flow.
-    fn blocks<'r>(&'r self) -> Box<dyn Iterator<Item=&'r Block> + 'r> where 'a: 'r;
-    /// Get all the blocks as a slice.
-    fn all_blocks(&self) -> &[Block];
-    /// To which block this instruction index belongs?
-    fn parent_block_of(&self, entry: usize) -> usize;
-
+impl basic::Blocks {
     /// Which blocks are following this one (in the control flow graph)?
-    fn successor_blocks(&self, block: Block) -> NextBlocks {
+    fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
+        let block = &self.blocks[block_idx];
         match block.instructions.last().unwrap() {
-            Instr::Ret(_) => NextBlocks::Terminated,
-            Instr::Branch { method: BranchKind::Unconditional, dest } => NextBlocks::Continuous(*dest),
-            Instr::Branch { method: BranchKind::If(_) | BranchKind::Unless(_), dest } =>
-                NextBlocks::Branching(*dest, block.last_index() + 1 + 1),
-            _ => NextBlocks::Continuous(block.last_index() + 1 + 1),
+            Instr::Marker(basic::Marker::Ret(_)) => NextBlocks::Terminated,
+            Instr::Branch(Branching { method: BranchKind::Unconditional, dest }) => NextBlocks::Continuous(*dest),
+            Instr::Branch(Branching { method: BranchKind::If(_) | BranchKind::Unless(_), dest }) =>
+                NextBlocks::Branching(*dest, block_idx + 1),
+            _ => NextBlocks::Continuous(block_idx + 1),
         }
     }
 
     /// Collect all the blocks reachable from the given block into an existing set.
-    fn collect_reachable_into(&self, entry: usize, result: &mut BTreeSet<usize>) {
-        let k = self.parent_block_of(entry);
-        if k >= self.all_blocks().len() { return; }
-        if result.insert(k) {
-            for n in self.successor_blocks(self.all_blocks()[k]) {
+    fn collect_reachable_into(&self, block_idx: usize, result: &mut BTreeSet<usize>) {
+        if block_idx >= self.blocks.len() { return; }
+        if result.insert(block_idx) {
+            for n in self.successor_blocks(block_idx) {
                 self.collect_reachable_into(n, result);
             }
         }
@@ -92,51 +85,46 @@ pub trait ControlFlow<'a> {
     /// Calculate all the blocks reachable from the given block.
     fn collect_reachable(&self, block_idx: usize) -> Vec<usize> {
         let mut result = BTreeSet::new();
-        let instr_idx = self.all_blocks()[block_idx].first_index + 1;
-        self.collect_reachable_into(instr_idx, &mut result);
+        self.collect_reachable_into(block_idx, &mut result);
         result.into_iter().collect()
     }
 }
 
-impl<'a> ControlFlow<'a> for Blocks<'a> {
-    fn blocks<'r>(&'r self) -> Box<dyn Iterator<Item=&'r Block> + 'r>
-        where 'a: 'r { Box::new(self.blocks.iter()) }
-    fn all_blocks(&self) -> &[Block] { &self.blocks }
-    fn parent_block_of(&self, instr_idx: usize) -> usize {
-        self.blocks.partition_point(|block| block.first_index + 1 < instr_idx)
-    }
-}
-
 /// A function.
-pub struct Function<'a> {
+pub struct Function {
     /// Number of formal parameters.
     pub parameter_count: u64,
-    /// All the basic blocks in the whole program.
-    pub all_blocks: &'a Blocks<'a>,
-    /// All relevant basic blocks in this function.
-    pub relevant_blocks: Vec<usize>,
-}
-
-impl<'a> ControlFlow<'a> for Function<'a> {
-    fn blocks<'r>(&'r self) -> Box<dyn Iterator<Item=&'r Block> + 'r> where 'a: 'r {
-        Box::new(self.relevant_blocks
-            .iter().copied()
-            .map(|k| &self.all_blocks()[k]))
-    }
-    fn all_blocks(&self) -> &[Block] { self.all_blocks.all_blocks() }
-    fn parent_block_of(&self, entry: usize) -> usize { self.all_blocks.parent_block_of(entry) }
+    /// Number of local variables.
+    pub local_var_count: u64,
+    /// Entry block in this function.
+    pub entry_block: usize,
+    /// All basic blocks in this function.
+    pub blocks: Vec<stripped::Block>,
 }
 
 /// Program validation error during conversion to a series of basic blocks.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// Multiple [`Instr::Ret`] instructions don't agree with each other on number of arguments.
+    /// Multiple [`basic::Marker::EnterProc`] instructions in one function.
+    OverlappingProcs(Vec<(usize, u64)>),
+    /// Multiple [`basic::Marker::Ret`] instructions don't agree with each other on number of arguments.
     InconsistentRets(Vec<(usize, u64)>),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::OverlappingProcs(entries) => {
+                writeln!(f, "multiple `enter` instructions in one function:")?;
+                for (k, local_bytes) in entries {
+                    write!(f, "- instr {}: enter {}", k, local_bytes)?;
+                    if local_bytes % 8 != 0 {
+                        writeln!(f, " (not a multiple of 8)")?;
+                    } else {
+                        writeln!(f)?;
+                    }
+                }
+            }
             Error::InconsistentRets(rets) => {
                 writeln!(f, "inconsistent `ret` instructions:")?;
                 for (k, arg_bytes) in rets {
@@ -153,43 +141,76 @@ impl Display for Error {
     }
 }
 
-impl<'a> Blocks<'a> {
+impl basic::Blocks {
     /// Split the basic blocks into functions.
     pub fn functions(&self) -> Result<Vec<Function>, Error> {
-        self.blocks.iter().copied()
+        self.blocks.iter().cloned()
             .enumerate()
             .filter(|(_, block)| block.is_function_entry())
-            .map(|(k, _)| Function {
-                parameter_count: 0, // to be changed
-                all_blocks: self,
-                relevant_blocks: self.collect_reachable(k),
-            })
-            .map(|func| {
-                let ks = func.blocks()
-                    .map(|block| block.indexed_instructions().last().unwrap())
-                    .filter_map(|instr| match instr {
-                        (k, Instr::Ret(n_args)) => Some((k, *n_args)),
-                        _ => None,
-                    }).collect_vec();
-                assert_ne!(ks.len(), 0);
-                let (_, parameter_bytes) = ks[0];
-                if ks.iter().all(|&(_, k)| k == parameter_bytes && k % 8 == 0) {
-                    let parameter_count = parameter_bytes / 8;
-                    Ok(Function { parameter_count, ..func })
-                } else {
-                    Err(Error::InconsistentRets(ks))
+            .map(|(k, _)| (k, self.collect_reachable(k)))
+            .map(|(entry, orig_blocks)| {
+                let mut remap = HashMap::new();
+                let mut blocks = Vec::new();
+                let mut entries = Vec::new();
+                let mut exits = Vec::new();
+                for block in orig_blocks {
+                    use Instr::Marker;
+                    use basic::Marker::{EnterProc, Ret};
+                    remap.insert(block, blocks.len());
+                    let block = &self.blocks[block];
+                    let first_index = block.first_index;
+                    let mut instrs = block.instructions.as_ref();
+                    if let [Marker(EnterProc(k)), ..] = instrs {
+                        entries.push((block.first_index, *k));
+                        instrs = instrs.split_first().unwrap().1
+                    }
+                    if let [.., Marker(Ret(k))] = instrs {
+                        exits.push((block.last_index(), *k));
+                        instrs = instrs.split_last().unwrap().1
+                    }
+                    let block: stripped::Block = Block {
+                        instructions: instrs.iter()
+                            .map(|instr| instr.clone().map_kind(
+                                std::convert::identity,
+                                std::convert::identity,
+                                std::convert::identity,
+                                |m| panic!("m: {}", m),
+                                std::convert::identity,
+                            )).collect(),
+                        first_index,
+                    };
+                    blocks.push(block);
                 }
-            })
-            .collect()
+                for block in &mut blocks {
+                    for instr in block.instructions.as_mut() {
+                        if let Instr::Branch(br) = instr {
+                            *br = br.clone().map_dest(|t| *remap.get(&t).unwrap());
+                        }
+                    }
+                }
+                assert_ne!(exits.len(), 0);
+                let (_, local_bytes) = entries[0];
+                let (_, parameter_bytes) = exits[0];
+                if !entries.iter().all(|&(_, k)| k == local_bytes && k % 8 == 0) {
+                    Err(Error::OverlappingProcs(entries))
+                } else if !exits.iter().all(|&(_, k)| k == parameter_bytes && k % 8 == 0) {
+                    Err(Error::InconsistentRets(exits))
+                } else {
+                    let local_var_count = local_bytes / 8;
+                    let parameter_count = parameter_bytes / 8;
+                    let &entry_block = remap.get(&entry).unwrap();
+                    Ok(Function { parameter_count, local_var_count, entry_block, blocks })
+                }
+            }).collect()
     }
 }
 
-impl<'a> Display for Function<'a> {
+impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Function with {} parameters:", self.parameter_count)?;
-        for &k in &self.relevant_blocks {
+        for (k, block) in self.blocks.iter().enumerate() {
             writeln!(f, "Block #{}:", k)?;
-            writeln!(f, "{}", self.all_blocks.blocks[k])?;
+            writeln!(f, "{}", block)?;
         }
         Ok(())
     }
@@ -197,7 +218,7 @@ impl<'a> Display for Function<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::Blocks;
+    use crate::instr::basic::Blocks;
     use crate::samples;
     use crate::program::read_program;
 

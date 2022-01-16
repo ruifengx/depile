@@ -15,6 +15,7 @@ description = "Translate three-address code back to C code."
 parse-display = "0.5.3"
 thiserror = "1.0.30"
 displaydoc = "0.2.3"
+derivative = "2.2.0"
 itertools = "0.10.3"
 smallvec = "1.7.0"
 clap = { version = "3.0.0-rc.7", features = ["derive"], optional = true }

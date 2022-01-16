@@ -50,8 +50,8 @@
 pub mod instr;
 pub mod program;
 pub mod block;
-// pub mod function;
-//
+pub mod function;
+
 // #[cfg(feature = "cli")]
 // pub mod cli;
 //
@@ -64,4 +64,4 @@ mod samples;
 pub use instr::Instr;
 pub use program::Program;
 pub use block::{Block, Blocks};
-// pub use function::{Function, ControlFlow};
+pub use function::Function;

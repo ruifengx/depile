@@ -17,21 +17,55 @@
  */
 
 //! Basic instructions for "raw" three-address code, with 1-1 correspondence to valid input texts.
+//!
+//! Also repurposed for block-level instructions. These are just like basic instructions, but with
+//! the exceptions that all destinations in [`Branch`]ing instructions are interpreted as block
+//! indices instead of instruction indices, and that the marker [`EntryPc`] shall never be used.
+//!
+//! [`Branch`]: crate::Instr::Branch
+//! [`EntryPc`]: Marker::EntryPc
 
-use std::fmt::Display;
 use parse_display::{Display, FromStr};
+use smallvec::{SmallVec, smallvec};
+use crate::instr::{HasDest, HasOperand, OutputInfo};
+
+/// Instruction kind "basic".
+pub type Kind = crate::instr::Kind<Operand, Branching, Marker, InterProc, Extra>;
 
 /// [`Instr`](crate::Instr)uction with kind "basic", i.e. "raw" three-address code.
-pub type Instr = crate::Instr<Operand, Marker, InterProc, Extra>;
+pub type Instr = crate::Instr<Kind>;
 
 /// [`BranchKind`](crate::instr::BranchKind) with kind "basic".
 pub type BranchKind = crate::instr::BranchKind<Operand>;
 
+/// [`Branching`](crate::instr::BranchKind) instructions with kind "basic".
+pub type Branching = crate::instr::Branching<Operand>;
+
+impl HasOperand<Operand> for Branching {
+    fn get_operands(&self) -> SmallVec<[&Operand; 2]> {
+        match &self.method {
+            BranchKind::If(operand) => smallvec![operand],
+            BranchKind::Unless(operand) => smallvec![operand],
+            _ => smallvec![],
+        }
+    }
+}
+
+impl OutputInfo for Branching {
+    fn has_output(&self) -> bool { false }
+}
+
+impl HasDest for Branching {
+    fn map_dest(self, f: impl FnOnce(usize) -> usize) -> Self {
+        Branching { dest: f(self.dest), ..self }
+    }
+}
+
 /// [`Block`](crate::Block) with kind "basic".
-pub type Block = crate::Block<Operand, Marker, InterProc, Extra>;
+pub type Block = crate::Block<Kind>;
 
 /// [`Blocks`](crate::block::Blocks) with kind "basic".
-pub type Blocks = crate::block::Blocks<Operand, Marker, InterProc, Extra>;
+pub type Blocks = crate::block::Blocks<Kind>;
 
 /// Basic inter-procedural instructions.
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -45,6 +79,28 @@ pub enum InterProc {
         /// Destination for the function call.
         dest: usize
     },
+}
+
+impl HasOperand<Operand> for InterProc {
+    fn get_operands(&self) -> SmallVec<[&Operand; 2]> {
+        match self {
+            InterProc::PushParam(operand) => smallvec![operand],
+            _ => smallvec![],
+        }
+    }
+}
+
+impl OutputInfo for InterProc {
+    fn has_output(&self) -> bool { false }
+}
+
+impl HasDest for InterProc {
+    fn map_dest(self, f: impl FnOnce(usize) -> usize) -> Self {
+        match self {
+            InterProc::Call { dest } => InterProc::Call { dest: f(dest) },
+            instr => instr,
+        }
+    }
 }
 
 /// Operands to all the [`Basic`] [`Instr`]uctions.
@@ -82,16 +138,4 @@ pub enum Marker {
 }
 
 /// Kind "basic" have no extra instructions.
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Extra {}
-
-impl std::str::FromStr for Extra {
-    type Err = ();
-    fn from_str(_: &str) -> Result<Self, Self::Err> { Err(()) }
-}
-
-impl Display for Extra {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {}
-    }
-}
+pub type Extra = super::Never;
