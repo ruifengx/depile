@@ -207,7 +207,8 @@ impl basic::Blocks {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Function with {} parameters:", self.parameter_count)?;
+        writeln!(f, "Function with {} parameters and {} local variables:",
+                 self.parameter_count, self.local_var_count)?;
         for (k, block) in self.blocks.iter().enumerate() {
             writeln!(f, "Block #{}:", k)?;
             writeln!(f, "{}", block)?;

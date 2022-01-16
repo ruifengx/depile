@@ -52,11 +52,11 @@ pub mod program;
 pub mod block;
 pub mod function;
 
-// #[cfg(feature = "cli")]
-// pub mod cli;
-//
-// #[cfg(feature = "cli")]
-// pub use cli::Cli;
+#[cfg(feature = "cli")]
+pub mod cli;
+
+#[cfg(feature = "cli")]
+pub use cli::Cli;
 
 #[cfg(test)]
 mod samples;
