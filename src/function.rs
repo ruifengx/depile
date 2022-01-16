@@ -102,6 +102,17 @@ pub struct Function {
     pub blocks: Vec<stripped::Block>,
 }
 
+/// Collection of functions for a [`Program`].
+pub struct Functions {
+    /// List of functions, in ascending order for block index.
+    pub functions: Vec<Function>,
+    /// The index of the entry function (i.e. `main`).
+    ///
+    /// This `main` function has its first instruction of its entry block preceded by `entrypc`
+    /// (in other words, it is marked as the entry point for the whole program).
+    pub entry_function: usize,
+}
+
 /// Program validation error during conversion to a series of basic blocks.
 #[derive(Debug, Error)]
 pub enum Error {
@@ -143,14 +154,14 @@ impl Display for Error {
 
 impl basic::Blocks {
     /// Split the basic blocks into functions.
-    pub fn functions(&self) -> Result<Vec<Function>, Error> {
-        let mut funcs = Vec::new();
+    pub fn functions(&self) -> Result<Functions, Error> {
+        let mut functions = Vec::new();
         let mut parent_func = HashMap::new();
         for (entry, orig_blocks) in self.blocks.iter().cloned()
             .enumerate()
             .filter(|(_, block)| block.is_function_entry())
             .map(|(k, _)| (k, self.collect_reachable(k))) {
-            parent_func.insert(entry, funcs.len());
+            parent_func.insert(entry, functions.len());
             let mut remap = HashMap::new();
             let mut blocks = Vec::new();
             let mut entries = Vec::new();
@@ -201,10 +212,10 @@ impl basic::Blocks {
                 let local_var_count = local_bytes / 8;
                 let parameter_count = parameter_bytes / 8;
                 let &entry_block = remap.get(&entry).unwrap();
-                funcs.push(Function { parameter_count, local_var_count, entry_block, blocks });
+                functions.push(Function { parameter_count, local_var_count, entry_block, blocks });
             }
         }
-        for func in &mut funcs {
+        for func in &mut functions {
             for block in &mut func.blocks {
                 for instr in block.instructions.as_mut() {
                     if let Instr::InterProc(ip) = instr {
@@ -213,18 +224,31 @@ impl basic::Blocks {
                 }
             }
         }
-        Ok(funcs)
+        let &entry_function = parent_func.get(&self.entry_block).unwrap();
+        Ok(Functions { functions, entry_function })
     }
 }
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Function with {} parameters and {} local variables:",
-                 self.parameter_count, self.local_var_count)?;
+        writeln!(f, "#parameters = {}", self.parameter_count)?;
+        writeln!(f, "#local_vars = {}", self.local_var_count)?;
+        writeln!(f)?;
         for (k, block) in self.blocks.iter().enumerate() {
             if k == self.entry_block { write!(f, "(ENTRY) ")?; }
             writeln!(f, "Block #{}:", k)?;
             writeln!(f, "{}", block)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for Functions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (k, func) in self.functions.iter().enumerate() {
+            if k == self.entry_function { write!(f, "(ENTRY) ")?; }
+            writeln!(f, "Function #{}:", k)?;
+            writeln!(f, "{}", func)?;
         }
         Ok(())
     }
@@ -243,7 +267,7 @@ mod tests {
             let blocks = Blocks::try_from(program.as_ref()).unwrap();
             let functions = blocks.functions().unwrap();
             // to avoid optimizations messing up our tests
-            assert!(!functions.is_empty());
+            assert!(!functions.functions.is_empty());
         }
     }
 }

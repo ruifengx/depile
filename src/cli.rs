@@ -88,9 +88,7 @@ impl Cli {
             Format::Functions => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 let functions = blocks.functions()?;
-                for (k, func) in functions.into_iter().enumerate() {
-                    println!("#{} {}", k, func);
-                }
+                println!("{}", functions);
             }
         }
         Ok(())
