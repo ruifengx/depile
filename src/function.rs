@@ -144,64 +144,76 @@ impl Display for Error {
 impl basic::Blocks {
     /// Split the basic blocks into functions.
     pub fn functions(&self) -> Result<Vec<Function>, Error> {
-        self.blocks.iter().cloned()
+        let mut funcs = Vec::new();
+        let mut parent_func = HashMap::new();
+        for (entry, orig_blocks) in self.blocks.iter().cloned()
             .enumerate()
             .filter(|(_, block)| block.is_function_entry())
-            .map(|(k, _)| (k, self.collect_reachable(k)))
-            .map(|(entry, orig_blocks)| {
-                let mut remap = HashMap::new();
-                let mut blocks = Vec::new();
-                let mut entries = Vec::new();
-                let mut exits = Vec::new();
-                for block in orig_blocks {
-                    use Instr::Marker;
-                    use basic::Marker::{EnterProc, Ret};
-                    remap.insert(block, blocks.len());
-                    let block = &self.blocks[block];
-                    let first_index = block.first_index;
-                    let mut instrs = block.instructions.as_ref();
-                    if let [Marker(EnterProc(k)), ..] = instrs {
-                        entries.push((block.first_index, *k));
-                        instrs = instrs.split_first().unwrap().1
-                    }
-                    if let [.., Marker(Ret(k))] = instrs {
-                        exits.push((block.last_index(), *k));
-                        instrs = instrs.split_last().unwrap().1
-                    }
-                    let block: stripped::Block = Block {
-                        instructions: instrs.iter()
-                            .map(|instr| instr.clone().map_kind(
-                                std::convert::identity,
-                                std::convert::identity,
-                                std::convert::identity,
-                                |m| panic!("m: {}", m),
-                                std::convert::identity,
-                            )).collect(),
-                        first_index,
-                    };
-                    blocks.push(block);
+            .map(|(k, _)| (k, self.collect_reachable(k))) {
+            parent_func.insert(entry, funcs.len());
+            let mut remap = HashMap::new();
+            let mut blocks = Vec::new();
+            let mut entries = Vec::new();
+            let mut exits = Vec::new();
+            for block in orig_blocks {
+                use Instr::Marker;
+                use basic::Marker::{EnterProc, Ret};
+                remap.insert(block, blocks.len());
+                let block = &self.blocks[block];
+                let first_index = block.first_index;
+                let mut instrs = block.instructions.as_ref();
+                if let [Marker(EnterProc(k)), ..] = instrs {
+                    entries.push((block.first_index, *k));
+                    instrs = instrs.split_first().unwrap().1
                 }
-                for block in &mut blocks {
-                    for instr in block.instructions.as_mut() {
-                        if let Instr::Branch(br) = instr {
-                            *br = br.clone().map_dest(|t| *remap.get(&t).unwrap());
-                        }
+                if let [.., Marker(Ret(k))] = instrs {
+                    exits.push((block.last_index(), *k));
+                    instrs = instrs.split_last().unwrap().1
+                }
+                let block: stripped::Block = Block {
+                    instructions: instrs.iter()
+                        .map(|instr| instr.clone().map_kind(
+                            std::convert::identity,
+                            std::convert::identity,
+                            std::convert::identity,
+                            |m| panic!("m: {}", m),
+                            std::convert::identity,
+                        )).collect(),
+                    first_index,
+                };
+                blocks.push(block);
+            }
+            for block in &mut blocks {
+                for instr in block.instructions.as_mut() {
+                    if let Instr::Branch(br) = instr {
+                        *br = br.clone().map_dest(|t| *remap.get(&t).unwrap());
                     }
                 }
-                assert_ne!(exits.len(), 0);
-                let (_, local_bytes) = entries[0];
-                let (_, parameter_bytes) = exits[0];
-                if !entries.iter().all(|&(_, k)| k == local_bytes && k % 8 == 0) {
-                    Err(Error::OverlappingProcs(entries))
-                } else if !exits.iter().all(|&(_, k)| k == parameter_bytes && k % 8 == 0) {
-                    Err(Error::InconsistentRets(exits))
-                } else {
-                    let local_var_count = local_bytes / 8;
-                    let parameter_count = parameter_bytes / 8;
-                    let &entry_block = remap.get(&entry).unwrap();
-                    Ok(Function { parameter_count, local_var_count, entry_block, blocks })
+            }
+            assert_ne!(exits.len(), 0);
+            let (_, local_bytes) = entries[0];
+            let (_, parameter_bytes) = exits[0];
+            if !entries.iter().all(|&(_, k)| k == local_bytes && k % 8 == 0) {
+                return Err(Error::OverlappingProcs(entries));
+            } else if !exits.iter().all(|&(_, k)| k == parameter_bytes && k % 8 == 0) {
+                return Err(Error::InconsistentRets(exits));
+            } else {
+                let local_var_count = local_bytes / 8;
+                let parameter_count = parameter_bytes / 8;
+                let &entry_block = remap.get(&entry).unwrap();
+                funcs.push(Function { parameter_count, local_var_count, entry_block, blocks });
+            }
+        }
+        for func in &mut funcs {
+            for block in &mut func.blocks {
+                for instr in block.instructions.as_mut() {
+                    if let Instr::InterProc(ip) = instr {
+                        *ip = ip.clone().map_dest(|t| *parent_func.get(&t).unwrap());
+                    }
                 }
-            }).collect()
+            }
+        }
+        Ok(funcs)
     }
 }
 
@@ -210,6 +222,7 @@ impl Display for Function {
         writeln!(f, "Function with {} parameters and {} local variables:",
                  self.parameter_count, self.local_var_count)?;
         for (k, block) in self.blocks.iter().enumerate() {
+            if k == self.entry_block { write!(f, "(ENTRY) ")?; }
             writeln!(f, "Block #{}:", k)?;
             writeln!(f, "{}", block)?;
         }
