@@ -39,7 +39,7 @@ impl basic::Block {
 
 /// Successor blocks.
 pub enum NextBlocks {
-    /// Control flow terminates here: block ends with an [`Instr::Ret`].
+    /// Control flow terminates here: block ends with an [`basic::Marker::Ret`].
     Terminated,
     /// Control flow is continuous: block ends with an unconditional branch, or a normal instruction.
     Continuous(usize),
@@ -102,7 +102,7 @@ pub struct Function {
     pub blocks: Vec<stripped::Block>,
 }
 
-/// Collection of functions for a [`Program`].
+/// Collection of functions for a [`Program`](crate::Program).
 pub struct Functions {
     /// List of functions, in ascending order for block index.
     pub functions: Vec<Function>,

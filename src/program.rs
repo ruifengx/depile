@@ -50,7 +50,7 @@ pub enum ParseError {
     InvalidInstr(#[from] parse_display::ParseError),
 }
 
-/// A program is a series of [`Instr`]uctions.
+/// A program is a series of [`basic::Instr`]uctions.
 pub type Program = [basic::Instr];
 
 /// Read from source text to a [`Program`].

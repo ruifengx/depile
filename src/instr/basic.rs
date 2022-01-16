@@ -103,7 +103,7 @@ impl HasDest for InterProc {
     }
 }
 
-/// Operands to all the [`Basic`] [`Instr`]uctions.
+/// Operands to all the "basic" [`Instr`]uctions.
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Operand {
     /// Global pointer.
