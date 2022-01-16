@@ -254,6 +254,27 @@ impl<Operand, Kind: InstrExt<Operand=Operand>> HasOperand<Operand> for Instr<Kin
     }
 }
 
+/// This `HasDest` is only implemented for [`basic::Instr`]uctions for a reason.
+///
+/// Other than the "basic" kind, instructions tends to interpret the destination field in
+/// [`Instr::InterProc`], [`Instr::Branch`], and [`Instr::Extra`] differently. Therefore, it is
+/// not very likely that any meaningful transformation on these destinations could be done with
+/// a single mapping function.
+///
+/// For instructions other than the "basic" kind, match against the three kind mentioned above
+/// and call `map_dest` on them, or implement [`HasDest`] for that specific kind of
+/// [`Instr`]uctions (and do it with _special care_).
+impl HasDest for basic::Instr {
+    fn map_dest(self, f: impl FnOnce(usize) -> usize) -> Self {
+        match self {
+            Instr::InterProc(inter) => Instr::InterProc(inter.map_dest(f)),
+            Instr::Branch(br) => Instr::Branch(br.map_dest(f)),
+            Instr::Extra(extra) => Instr::Extra(extra.map_dest(f)),
+            instr => instr,
+        }
+    }
+}
+
 impl<Kind: InstrExt> OutputInfo for Instr<Kind>
     where Kind::Branching: OutputInfo,
           Kind::InterProc: OutputInfo,
@@ -265,20 +286,6 @@ impl<Kind: InstrExt> OutputInfo for Instr<Kind>
             Instr::InterProc(inter) => inter.has_output(),
             Instr::Extra(extra) => extra.has_output(),
             _ => false,
-        }
-    }
-}
-
-impl<Kind: InstrExt> HasDest for Instr<Kind>
-    where Kind::Branching: HasDest,
-          Kind::InterProc: HasDest,
-          Kind::Extra: HasDest {
-    fn map_dest(self, f: impl FnOnce(usize) -> usize) -> Self {
-        match self {
-            Instr::InterProc(inter) => Instr::InterProc(inter.map_dest(f)),
-            Instr::Branch(br) => Instr::Branch(br.map_dest(f)),
-            Instr::Extra(extra) => Instr::Extra(extra.map_dest(f)),
-            instr => instr,
         }
     }
 }
