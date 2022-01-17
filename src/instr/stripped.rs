@@ -36,3 +36,9 @@ pub type Block = crate::Block<Kind>;
 
 /// [`Blocks`](crate::block::Blocks) with kind "stripped".
 pub type Blocks = crate::block::Blocks<Kind>;
+
+/// [`Function`](crate::Function) with kind "stripped".
+pub type Function = crate::Function<Kind>;
+
+/// [`Functions`](crate::function::Functions) with kind "stripped".
+pub type Functions = crate::function::Functions<Kind>;

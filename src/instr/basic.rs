@@ -46,7 +46,7 @@ impl HasOperand<Operand> for Branching {
         match &self.method {
             BranchKind::If(operand) => smallvec![operand],
             BranchKind::Unless(operand) => smallvec![operand],
-            _ => smallvec![],
+            _ => SmallVec::new(),
         }
     }
 }
@@ -67,6 +67,12 @@ pub type Block = crate::Block<Kind>;
 /// [`Blocks`](crate::block::Blocks) with kind "basic".
 pub type Blocks = crate::block::Blocks<Kind>;
 
+/// [`Function`](crate::Function) with kind "basic".
+pub type Function = crate::Function<Kind>;
+
+/// [`Functions`](crate::function::Functions) with kind "basic".
+pub type Functions = crate::function::Functions<Kind>;
+
 /// Basic inter-procedural instructions.
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum InterProc {
@@ -85,7 +91,7 @@ impl HasOperand<Operand> for InterProc {
     fn get_operands(&self) -> SmallVec<[&Operand; 2]> {
         match self {
             InterProc::PushParam(operand) => smallvec![operand],
-            _ => smallvec![],
+            _ => SmallVec::new(),
         }
     }
 }

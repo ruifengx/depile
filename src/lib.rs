@@ -51,6 +51,7 @@ pub mod instr;
 pub mod program;
 pub mod block;
 pub mod function;
+pub mod control_flow;
 
 #[cfg(feature = "cli")]
 pub mod cli;

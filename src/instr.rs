@@ -251,7 +251,7 @@ impl<Operand, K: InstrExt<Operand=Operand>> HasOperand<Operand> for Instr<K>
             Write(operand) => smallvec![operand],
             InterProc(inter) => inter.get_operands(),
             Extra(extra) => extra.get_operands(),
-            _ => smallvec![],
+            _ => SmallVec::new(),
         }
     }
 }

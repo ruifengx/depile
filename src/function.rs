@@ -18,80 +18,34 @@
 
 //! Reconstruct functions from basic blocks.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
-use smallvec::{smallvec, SmallVec};
-use crate::{Instr, instr::BranchKind, Block};
-use crate::instr::{basic, Branching, HasDest, stripped};
+use crate::{Instr::*, Block};
+use crate::control_flow::{ControlFlow, HasBranchingBehaviour, NextBlocks, successor_blocks_impl};
+use crate::instr::{basic, HasDest, InstrExt, stripped};
 
 impl basic::Block {
     /// Whether or not this block is the entry to some function.
     pub fn is_function_entry(&self) -> bool {
-        matches!(self.instructions[0], Instr::Marker(basic::Marker::EnterProc(_)))
+        matches!(self.instructions[0], Marker(basic::Marker::EnterProc(_)))
     }
 
     /// Whether or not this block has a [`basic::Marker::Ret`] as its last instruction.
     pub fn is_function_return(&self) -> bool {
-        matches!(self.instructions.last().unwrap(), Instr::Marker(basic::Marker::Ret(_)))
+        matches!(self.instructions.last().unwrap(), Marker(basic::Marker::Ret(_)))
     }
 }
 
-/// Successor blocks.
-pub enum NextBlocks {
-    /// Control flow terminates here: block ends with an [`basic::Marker::Ret`].
-    Terminated,
-    /// Control flow is continuous: block ends with an unconditional branch, or a normal instruction.
-    Continuous(usize),
-    /// Control flow branches here: block ends with a conditional branch.
-    Branching(usize, usize),
-}
-
-impl IntoIterator for NextBlocks {
-    type Item = usize;
-    type IntoIter = smallvec::IntoIter<[usize; 2]>;
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            NextBlocks::Terminated => SmallVec::new(),
-            NextBlocks::Continuous(m) => smallvec![m],
-            NextBlocks::Branching(m, n) => smallvec![m, n],
-        }.into_iter()
-    }
-}
-
-impl basic::Blocks {
-    /// Which blocks are following this one (in the control flow graph)?
+impl ControlFlow for basic::Blocks {
+    fn block_count(&self) -> usize { self.blocks.len() }
     fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
-        let block = &self.blocks[block_idx];
-        match block.instructions.last().unwrap() {
-            Instr::Marker(basic::Marker::Ret(_)) => NextBlocks::Terminated,
-            Instr::Branch(Branching { method: BranchKind::Unconditional, dest }) => NextBlocks::Continuous(*dest),
-            Instr::Branch(Branching { method: BranchKind::If(_) | BranchKind::Unless(_), dest }) =>
-                NextBlocks::Branching(*dest, block_idx + 1),
-            _ => NextBlocks::Continuous(block_idx + 1),
-        }
-    }
-
-    /// Collect all the blocks reachable from the given block into an existing set.
-    fn collect_reachable_into(&self, block_idx: usize, result: &mut BTreeSet<usize>) {
-        if block_idx >= self.blocks.len() { return; }
-        if result.insert(block_idx) {
-            for n in self.successor_blocks(block_idx) {
-                self.collect_reachable_into(n, result);
-            }
-        }
-    }
-
-    /// Calculate all the blocks reachable from the given block.
-    fn collect_reachable(&self, block_idx: usize) -> Vec<usize> {
-        let mut result = BTreeSet::new();
-        self.collect_reachable_into(block_idx, &mut result);
-        result.into_iter().collect()
+        successor_blocks_impl(&self.blocks, block_idx)
     }
 }
 
 /// A function.
-pub struct Function {
+pub struct Function<K: InstrExt = stripped::Kind> {
     /// Number of formal parameters.
     pub parameter_count: u64,
     /// Number of local variables.
@@ -99,13 +53,23 @@ pub struct Function {
     /// Entry block in this function.
     pub entry_block: usize,
     /// All basic blocks in this function.
-    pub blocks: Vec<stripped::Block>,
+    pub blocks: Vec<Block<K>>,
+}
+
+impl<K: InstrExt> ControlFlow for Function<K>
+    where K::Branching: HasBranchingBehaviour,
+          K::Marker: HasBranchingBehaviour,
+          K::Extra: HasBranchingBehaviour {
+    fn block_count(&self) -> usize { self.blocks.len() }
+    fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
+        successor_blocks_impl(&self.blocks, block_idx)
+    }
 }
 
 /// Collection of functions for a [`Program`](crate::Program).
-pub struct Functions {
+pub struct Functions<K: InstrExt = stripped::Kind> {
     /// List of functions, in ascending order for block index.
-    pub functions: Vec<Function>,
+    pub functions: Vec<Function<K>>,
     /// The index of the entry function (i.e. `main`).
     ///
     /// This `main` function has its first instruction of its entry block preceded by `entrypc`
@@ -167,7 +131,6 @@ impl basic::Blocks {
             let mut entries = Vec::new();
             let mut exits = Vec::new();
             for block in orig_blocks {
-                use Instr::Marker;
                 use basic::Marker::{EnterProc, Ret};
                 remap.insert(block, blocks.len());
                 let block = &self.blocks[block];
@@ -196,12 +159,13 @@ impl basic::Blocks {
             }
             for block in &mut blocks {
                 for instr in block.instructions.as_mut() {
-                    if let Instr::Branch(br) = instr {
+                    if let Branch(br) = instr {
                         *br = br.clone().map_dest(|t| *remap.get(&t).unwrap());
                     }
                 }
             }
-            assert_ne!(exits.len(), 0);
+            assert!(!entries.is_empty());
+            assert!(!exits.is_empty());
             let (_, local_bytes) = entries[0];
             let (_, parameter_bytes) = exits[0];
             if !entries.iter().all(|&(_, k)| k == local_bytes && k % 8 == 0) {
@@ -218,7 +182,7 @@ impl basic::Blocks {
         for func in &mut functions {
             for block in &mut func.blocks {
                 for instr in block.instructions.as_mut() {
-                    if let Instr::InterProc(ip) = instr {
+                    if let InterProc(ip) = instr {
                         *ip = ip.clone().map_dest(|t| *parent_func.get(&t).unwrap());
                     }
                 }
@@ -229,7 +193,12 @@ impl basic::Blocks {
     }
 }
 
-impl Display for Function {
+impl<K: InstrExt> Display for Function<K>
+    where K::Operand: Display,
+          K::Branching: Display,
+          K::Marker: Display,
+          K::InterProc: Display,
+          K::Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "#parameters = {}", self.parameter_count)?;
         writeln!(f, "#local_vars = {}", self.local_var_count)?;
@@ -243,7 +212,12 @@ impl Display for Function {
     }
 }
 
-impl Display for Functions {
+impl<K: InstrExt> Display for Functions<K>
+    where K::Operand: Display,
+          K::Branching: Display,
+          K::Marker: Display,
+          K::InterProc: Display,
+          K::Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (k, func) in self.functions.iter().enumerate() {
             if k == self.entry_function { write!(f, "(ENTRY) ")?; }
@@ -265,6 +239,7 @@ mod tests {
         for input in samples::ALL_SAMPLES {
             let program = read_program(input).unwrap();
             let blocks = Blocks::try_from(program.as_ref()).unwrap();
+            println!("{}", blocks);
             let functions = blocks.functions().unwrap();
             // to avoid optimizations messing up our tests
             assert!(!functions.functions.is_empty());
