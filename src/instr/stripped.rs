@@ -18,6 +18,8 @@
 
 //! Stripped instructions for use in [`Function`](crate::Function)s.
 
+/// Kind "stripped" use the same operand, as well as the same branching, inter-procedural, and
+/// extra instructions as kind "basic".
 pub use super::basic::{Operand, Branching, InterProc, Extra};
 
 /// Instruction kind "stripped".

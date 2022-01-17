@@ -30,40 +30,40 @@ use super::{Instr, Program};
 
 /// Basic block.
 #[derive(Derivative)]
-#[derivative(Debug(bound = "Kind::Operand: Debug, Kind::Branching: Debug, Kind::Marker: Debug, Kind::InterProc: Debug, Kind::Extra: Debug"))]
-#[derivative(Clone(bound = "Kind::Operand: Clone, Kind::Branching: Clone, Kind::Marker: Clone, Kind::InterProc: Clone, Kind::Extra: Clone"))]
-#[derivative(Eq(bound = "Kind::Operand: Eq, Kind::Branching: Eq, Kind::Marker: Eq, Kind::InterProc: Eq, Kind::Extra: Eq"))]
-#[derivative(PartialEq(bound = "Kind::Operand: PartialEq, Kind::Branching: PartialEq, Kind::Marker: PartialEq, Kind::InterProc: PartialEq, Kind::Extra: PartialEq"))]
-pub struct Block<Kind: InstrExt> {
+#[derivative(Debug(bound = "K::Operand: Debug, K::Branching: Debug, K::Marker: Debug, K::InterProc: Debug, K::Extra: Debug"))]
+#[derivative(Clone(bound = "K::Operand: Clone, K::Branching: Clone, K::Marker: Clone, K::InterProc: Clone, K::Extra: Clone"))]
+#[derivative(Eq(bound = "K::Operand: Eq, K::Branching: Eq, K::Marker: Eq, K::InterProc: Eq, K::Extra: Eq"))]
+#[derivative(PartialEq(bound = "K::Operand: PartialEq, K::Branching: PartialEq, K::Marker: PartialEq, K::InterProc: PartialEq, K::Extra: PartialEq"))]
+pub struct Block<K: InstrExt> {
     /// Index of the first instruction.
     pub first_index: usize,
     /// All the instructions in this basic block.
-    pub instructions: Box<[Instr<Kind>]>,
+    pub instructions: Box<[Instr<K>]>,
 }
 
 /// Iterator of indexed instructions into a block.
-pub type IndexedInstr<'a, Kind> = std::iter::Zip<
+pub type IndexedInstr<'a, K> = std::iter::Zip<
     std::ops::RangeFrom<usize>,
-    std::slice::Iter<'a, Instr<Kind>>,
+    std::slice::Iter<'a, Instr<K>>,
 >;
 
-impl<Kind: InstrExt> Block<Kind> {
+impl<K: InstrExt> Block<K> {
     /// Index of the last instruction.
     pub fn last_index(&self) -> usize {
         self.first_index + self.instructions.len() - 1
     }
     /// Get iterator into instructions with indices.
-    pub fn indexed(&self) -> IndexedInstr<Kind> {
+    pub fn indexed(&self) -> IndexedInstr<K> {
         (self.first_index..).zip(self.instructions.iter())
     }
 }
 
-impl<Kind: InstrExt> Display for Block<Kind>
-    where Kind::Operand: Display,
-          Kind::Branching: Display,
-          Kind::Marker: Display,
-          Kind::InterProc: Display,
-          Kind::Extra: Display {
+impl<K: InstrExt> Display for Block<K>
+    where K::Operand: Display,
+          K::Branching: Display,
+          K::Marker: Display,
+          K::InterProc: Display,
+          K::Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for instr in self.instructions.iter() {
             writeln!(f, "  {}", instr)?;
@@ -115,13 +115,13 @@ pub enum Error {
 
 /// Collection of basic blocks for a [`Program`].
 #[derive(Derivative)]
-#[derivative(Debug(bound = "Kind::Operand: Debug, Kind::Branching: Debug, Kind::Marker: Debug, Kind::InterProc: Debug, Kind::Extra: Debug"))]
-#[derivative(Clone(bound = "Kind::Operand: Clone, Kind::Branching: Clone, Kind::Marker: Clone, Kind::InterProc: Clone, Kind::Extra: Clone"))]
-#[derivative(Eq(bound = "Kind::Operand: Eq, Kind::Branching: Eq, Kind::Marker: Eq, Kind::InterProc: Eq, Kind::Extra: Eq"))]
-#[derivative(PartialEq(bound = "Kind::Operand: PartialEq, Kind::Branching: PartialEq, Kind::Marker: PartialEq, Kind::InterProc: PartialEq, Kind::Extra: PartialEq"))]
-pub struct Blocks<Kind: InstrExt> {
+#[derivative(Debug(bound = "K::Operand: Debug, K::Branching: Debug, K::Marker: Debug, K::InterProc: Debug, K::Extra: Debug"))]
+#[derivative(Clone(bound = "K::Operand: Clone, K::Branching: Clone, K::Marker: Clone, K::InterProc: Clone, K::Extra: Clone"))]
+#[derivative(Eq(bound = "K::Operand: Eq, K::Branching: Eq, K::Marker: Eq, K::InterProc: Eq, K::Extra: Eq"))]
+#[derivative(PartialEq(bound = "K::Operand: PartialEq, K::Branching: PartialEq, K::Marker: PartialEq, K::InterProc: PartialEq, K::Extra: PartialEq"))]
+pub struct Blocks<K: InstrExt> {
     /// List of basic blocks, in ascending order for instruction index.
-    pub blocks: Vec<Block<Kind>>,
+    pub blocks: Vec<Block<K>>,
     /// The index of the entry block (marked as `entrypc`).
     pub entry_block: usize,
 }
@@ -211,12 +211,12 @@ impl<'a> TryFrom<&'a Program> for basic::Blocks {
     }
 }
 
-impl<Kind: InstrExt> Display for Blocks<Kind>
-    where Kind::Operand: Display,
-          Kind::Branching: Display,
-          Kind::Marker: Display,
-          Kind::InterProc: Display,
-          Kind::Extra: Display {
+impl<K: InstrExt> Display for Blocks<K>
+    where K::Operand: Display,
+          K::Branching: Display,
+          K::Marker: Display,
+          K::InterProc: Display,
+          K::Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (k, block) in self.blocks.iter().enumerate() {
             if k == self.entry_block { write!(f, "(ENTRY) ")?; }

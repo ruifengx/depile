@@ -21,9 +21,8 @@
 pub mod basic;
 pub mod stripped;
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
-use std::fmt::Display;
 use std::str::FromStr;
 use derivative::Derivative;
 use parse_display::{Display, FromStr};
@@ -106,7 +105,8 @@ pub trait InstrExt: Copy + Eq + Ord + Debug + Display + FromStr {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Copy(bound = ""), Clone(bound = ""))]
-#[derivative(Ord(bound = ""), PartialOrd(bound = ""), Eq(bound = ""), PartialEq(bound = ""))]
+#[derivative(Ord(bound = ""), PartialOrd(bound = ""))]
+#[derivative(Eq(bound = ""), PartialEq(bound = ""))]
 pub struct Kind<Operand, Branching, Marker, InterProc, Extra> {
     _phantom: PhantomData<*const (Operand, Branching, Marker, InterProc, Extra)>,
 }
@@ -143,57 +143,59 @@ pub trait OutputInfo {
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[allow(missing_docs)]
 #[display(style = "lowercase")]
-pub enum Instr<Kind: InstrExt> {
+pub enum Instr<K: InstrExt = basic::Kind> {
     /// Binary operations.
     #[display("{op} {lhs} {rhs}")]
     Binary {
         op: BOp,
-        lhs: Kind::Operand,
-        rhs: Kind::Operand,
+        lhs: K::Operand,
+        rhs: K::Operand,
     },
     /// Unary operations.
     #[display("{op} {operand}")]
     Unary {
         op: UOp,
-        operand: Kind::Operand,
+        operand: K::Operand,
     },
     /// Branching operations.
     #[display("{0}")]
-    Branch(Kind::Branching),
+    Branch(K::Branching),
     /// Pointer dereference.
     #[display("load {0}")]
-    Load(Kind::Operand),
+    Load(K::Operand),
     /// Pointer dereference and assign.
     #[display("store {data} {address}")]
     Store {
-        data: Kind::Operand,
-        address: Kind::Operand,
+        data: K::Operand,
+        address: K::Operand,
     },
     #[display("move {source} {dest}")]
     Move {
-        source: Kind::Operand,
-        dest: Kind::Operand,
+        source: K::Operand,
+        dest: K::Operand,
     },
     /// Defined as `scanf("%lld", &x);` in C.
     #[display("read")]
     Read,
     /// Defined as `printf(" %lld", x);` in C.
     #[display("write {0}")]
-    Write(Kind::Operand),
+    Write(K::Operand),
     /// Defined as `printf("\n");` in C.
     #[display("wrl")]
     WriteLn,
     /// Inter-procedural (function call related) instruction.
     #[display("{0}")]
-    InterProc(Kind::InterProc),
+    InterProc(K::InterProc),
     Nop,
     /// Marker instructions.
     #[display("{0}")]
-    Marker(Kind::Marker),
+    Marker(K::Marker),
     /// Other instructions.
     #[display("{0}")]
-    Extra(Kind::Extra),
+    Extra(K::Extra),
 }
+
+use Instr::*;
 
 impl<K1: InstrExt> Instr<K1> {
     /// Transform into (potentially) another kind of instruction.
@@ -206,49 +208,49 @@ impl<K1: InstrExt> Instr<K1> {
         map_extra: impl FnOnce(K1::Extra) -> K2::Extra,
     ) -> Instr<K2> {
         match self {
-            Instr::Binary { op, lhs, rhs } => Instr::Binary {
+            Binary { op, lhs, rhs } => Binary {
                 op,
                 lhs: map_operand(lhs),
                 rhs: map_operand(rhs),
             },
-            Instr::Unary { op, operand } => Instr::Unary {
+            Unary { op, operand } => Unary {
                 op,
                 operand: map_operand(operand),
             },
-            Instr::Branch(br) => Instr::Branch(map_branching(br)),
-            Instr::Load(operand) => Instr::Load(map_operand(operand)),
-            Instr::Store { data, address } => Instr::Store {
+            Branch(br) => Branch(map_branching(br)),
+            Load(operand) => Load(map_operand(operand)),
+            Store { data, address } => Store {
                 data: map_operand(data),
                 address: map_operand(address),
             },
-            Instr::Move { source, dest } => Instr::Move {
+            Move { source, dest } => Move {
                 source: map_operand(source),
                 dest: map_operand(dest),
             },
-            Instr::Read => Instr::Read,
-            Instr::Write(operand) => Instr::Write(map_operand(operand)),
-            Instr::WriteLn => Instr::WriteLn,
-            Instr::InterProc(ip) => Instr::InterProc(map_inter_proc(ip)),
-            Instr::Nop => Instr::Nop,
-            Instr::Marker(marker) => Instr::Marker(map_marker(marker)),
-            Instr::Extra(extra) => Instr::Extra(map_extra(extra)),
+            Read => Read,
+            Write(operand) => Write(map_operand(operand)),
+            WriteLn => WriteLn,
+            InterProc(ip) => InterProc(map_inter_proc(ip)),
+            Nop => Nop,
+            Marker(marker) => Marker(map_marker(marker)),
+            Extra(extra) => Extra(map_extra(extra)),
         }
     }
 }
 
-impl<Operand, Kind: InstrExt<Operand=Operand>> HasOperand<Operand> for Instr<Kind>
-    where Kind::Branching: HasOperand<Operand>,
-          Kind::InterProc: HasOperand<Operand>,
-          Kind::Extra: HasOperand<Operand> {
+impl<Operand, K: InstrExt<Operand=Operand>> HasOperand<Operand> for Instr<K>
+    where K::Branching: HasOperand<Operand>,
+          K::InterProc: HasOperand<Operand>,
+          K::Extra: HasOperand<Operand> {
     fn get_operands(&self) -> SmallVec<[&Operand; 2]> {
         match self {
-            Instr::Binary { lhs, rhs, .. } => smallvec![lhs, rhs],
-            Instr::Unary { operand, .. } => smallvec![operand],
-            Instr::Load(operand) => smallvec![operand],
-            Instr::Store { data, address } => smallvec![data, address],
-            Instr::Write(operand) => smallvec![operand],
-            Instr::InterProc(inter) => inter.get_operands(),
-            Instr::Extra(extra) => extra.get_operands(),
+            Binary { lhs, rhs, .. } => smallvec![lhs, rhs],
+            Unary { operand, .. } => smallvec![operand],
+            Load(operand) => smallvec![operand],
+            Store { data, address } => smallvec![data, address],
+            Write(operand) => smallvec![operand],
+            InterProc(inter) => inter.get_operands(),
+            Extra(extra) => extra.get_operands(),
             _ => smallvec![],
         }
     }
@@ -257,7 +259,7 @@ impl<Operand, Kind: InstrExt<Operand=Operand>> HasOperand<Operand> for Instr<Kin
 /// This `HasDest` is only implemented for [`basic::Instr`]uctions for a reason.
 ///
 /// Other than the "basic" kind, instructions tends to interpret the destination field in
-/// [`Instr::InterProc`], [`Instr::Branch`], and [`Instr::Extra`] differently. Therefore, it is
+/// [`InterProc`], [`Branch`], and [`Extra`] differently. Therefore, it is
 /// not very likely that any meaningful transformation on these destinations could be done with
 /// a single mapping function.
 ///
@@ -267,9 +269,9 @@ impl<Operand, Kind: InstrExt<Operand=Operand>> HasOperand<Operand> for Instr<Kin
 impl HasDest for basic::Instr {
     fn map_dest(self, f: impl FnOnce(usize) -> usize) -> Self {
         match self {
-            Instr::InterProc(inter) => Instr::InterProc(inter.map_dest(f)),
-            Instr::Branch(br) => Instr::Branch(br.map_dest(f)),
-            Instr::Extra(extra) => Instr::Extra(extra.map_dest(f)),
+            InterProc(inter) => InterProc(inter.map_dest(f)),
+            Branch(br) => Branch(br.map_dest(f)),
+            Extra(extra) => Extra(extra.map_dest(f)),
             instr => instr,
         }
     }
@@ -281,10 +283,9 @@ impl<Kind: InstrExt> OutputInfo for Instr<Kind>
           Kind::Extra: OutputInfo {
     fn has_output(&self) -> bool {
         match self {
-            Instr::Binary { .. } | Instr::Unary { .. } |
-            Instr::Load(_) | Instr::Move { .. } | Instr::Read => true,
-            Instr::InterProc(inter) => inter.has_output(),
-            Instr::Extra(extra) => extra.has_output(),
+            Binary { .. } | Unary { .. } | Load(_) | Move { .. } | Read => true,
+            InterProc(inter) => inter.has_output(),
+            Extra(extra) => extra.has_output(),
             _ => false,
         }
     }
@@ -293,11 +294,10 @@ impl<Kind: InstrExt> OutputInfo for Instr<Kind>
 #[cfg(test)]
 mod tests {
     use crate::instr::Branching;
-    use super::{BOp, UOp};
-    use super::basic::{BranchKind, Instr, InterProc, Marker, Operand};
+    use super::{BOp, UOp, basic::{Instr, BranchKind, InterProc, Marker, Operand}};
 
     macro_rules! assert_equiv {
-        ($($str: expr => $val: expr),+ $(,)?) => {
+        ($($str: literal => $val: expr),+ $(,)?) => {
             $(
                 assert_eq!($val.to_string(), $str);
                 assert_eq!($val, $str.parse().unwrap());
