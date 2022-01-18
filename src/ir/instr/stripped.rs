@@ -16,29 +16,31 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-//! Stripped instructions for use in [`Function`](crate::Function)s.
+//! Stripped instructions for use in [`Function`](ir::Function)s.
+
+use crate::ir;
 
 /// Kind "stripped" use the same operand, as well as the same branching, inter-procedural, and
 /// extra instructions as kind "basic".
 pub use super::basic::{Operand, Branching, InterProc, Extra};
 
 /// Instruction kind "stripped".
-pub type Kind = crate::instr::Kind<Operand, Branching, Marker, InterProc, Extra>;
+pub type Kind = ir::instr::Kind<Operand, Branching, Marker, InterProc, Extra>;
 
-/// [`Instr`](crate::Instr)uction with kind "stripped".
-pub type Instr = crate::Instr<Kind>;
+/// [`Instr`](ir::Instr)uction with kind "stripped".
+pub type Instr = ir::Instr<Kind>;
 
 /// Kind "stripped" has no marker instructions.
 pub type Marker = super::Never;
 
-/// [`Block`](crate::Block) with kind "stripped".
-pub type Block = crate::Block<Kind>;
+/// [`Block`](ir::Block) with kind "stripped".
+pub type Block = ir::Block<Kind>;
 
-/// [`Blocks`](crate::block::Blocks) with kind "stripped".
-pub type Blocks = crate::block::Blocks<Kind>;
+/// [`Blocks`](ir::Blocks) with kind "stripped".
+pub type Blocks = ir::Blocks<Kind>;
 
-/// [`Function`](crate::Function) with kind "stripped".
-pub type Function = crate::Function<Kind>;
+/// [`Function`](ir::Function) with kind "stripped".
+pub type Function = ir::Function<Kind>;
 
-/// [`Functions`](crate::function::Functions) with kind "stripped".
-pub type Functions = crate::function::Functions<Kind>;
+/// [`Functions`](ir::Functions) with kind "stripped".
+pub type Functions = ir::Functions<Kind>;

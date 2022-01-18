@@ -1,6 +1,6 @@
 /*
  * depile: translate three-address code back to C code.
- * Copyright (C) 2021  Ruifeng Xie
+ * Copyright (C) 2022  Ruifeng Xie
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -293,7 +293,7 @@ impl<Kind: InstrExt> OutputInfo for Instr<Kind>
 
 #[cfg(test)]
 mod tests {
-    use crate::instr::Branching;
+    use crate::ir::instr::Branching;
     use super::{BOp, UOp, basic::{Instr, BranchKind, InterProc, Marker, Operand}};
 
     macro_rules! assert_equiv {

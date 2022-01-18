@@ -22,24 +22,24 @@
 //! the exceptions that all destinations in [`Branch`]ing instructions are interpreted as block
 //! indices instead of instruction indices, and that the marker [`EntryPc`] shall never be used.
 //!
-//! [`Branch`]: crate::Instr::Branch
+//! [`Branch`]: crate::ir::Instr::Branch
 //! [`EntryPc`]: Marker::EntryPc
 
 use parse_display::{Display, FromStr};
 use smallvec::{SmallVec, smallvec};
-use crate::instr::{HasDest, HasOperand, OutputInfo};
+use crate::ir::{self, instr::{HasDest, HasOperand, OutputInfo}};
 
 /// Instruction kind "basic".
-pub type Kind = crate::instr::Kind<Operand, Branching, Marker, InterProc, Extra>;
+pub type Kind = ir::instr::Kind<Operand, Branching, Marker, InterProc, Extra>;
 
-/// [`Instr`](crate::Instr)uction with kind "basic", i.e. "raw" three-address code.
-pub type Instr = crate::Instr<Kind>;
+/// [`Instr`](ir::Instr)uction with kind "basic", i.e. "raw" three-address code.
+pub type Instr = ir::Instr<Kind>;
 
-/// [`BranchKind`](crate::instr::BranchKind) with kind "basic".
-pub type BranchKind = crate::instr::BranchKind<Operand>;
+/// [`BranchKind`](ir::instr::BranchKind) with kind "basic".
+pub type BranchKind = ir::instr::BranchKind<Operand>;
 
-/// [`Branching`](crate::instr::BranchKind) instructions with kind "basic".
-pub type Branching = crate::instr::Branching<Operand>;
+/// [`Branching`](ir::instr::BranchKind) instructions with kind "basic".
+pub type Branching = ir::instr::Branching<Operand>;
 
 impl HasOperand<Operand> for Branching {
     fn get_operands(&self) -> SmallVec<[&Operand; 2]> {
@@ -61,17 +61,17 @@ impl HasDest for Branching {
     }
 }
 
-/// [`Block`](crate::Block) with kind "basic".
-pub type Block = crate::Block<Kind>;
+/// [`Block`](ir::Block) with kind "basic".
+pub type Block = ir::Block<Kind>;
 
-/// [`Blocks`](crate::block::Blocks) with kind "basic".
-pub type Blocks = crate::block::Blocks<Kind>;
+/// [`Blocks`](ir::Blocks) with kind "basic".
+pub type Blocks = ir::Blocks<Kind>;
 
-/// [`Function`](crate::Function) with kind "basic".
-pub type Function = crate::Function<Kind>;
+/// [`Function`](ir::Function) with kind "basic".
+pub type Function = ir::Function<Kind>;
 
-/// [`Functions`](crate::function::Functions) with kind "basic".
-pub type Functions = crate::function::Functions<Kind>;
+/// [`Functions`](ir::Functions) with kind "basic".
+pub type Functions = ir::Functions<Kind>;
 
 /// Basic inter-procedural instructions.
 #[derive(Debug, Display, FromStr, Clone, Ord, PartialOrd, Eq, PartialEq)]

@@ -1,6 +1,6 @@
 /*
  * depile: translate three-address code back to C code.
- * Copyright (C) 2021  Ruifeng Xie
+ * Copyright (C) 2022  Ruifeng Xie
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -21,9 +21,9 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
-use crate::{Instr::*, Block};
-use crate::control_flow::{ControlFlow, HasBranchingBehaviour, NextBlocks, successor_blocks_impl};
-use crate::instr::{basic, HasDest, InstrExt, stripped};
+use crate::analysis::control_flow::{ControlFlow, HasBranchingBehaviour, NextBlocks, successor_blocks_impl};
+use crate::ir::{Instr::*, Block};
+use crate::ir::instr::{basic, stripped, HasDest, InstrExt};
 
 impl basic::Block {
     /// Whether or not this block is the entry to some function.
@@ -66,7 +66,7 @@ impl<K: InstrExt> ControlFlow for Function<K>
     }
 }
 
-/// Collection of functions for a [`Program`](crate::Program).
+/// Collection of functions for a [`Program`](super::Program).
 pub struct Functions<K: InstrExt = stripped::Kind> {
     /// List of functions, in ascending order for block index.
     pub functions: Vec<Function<K>>,
@@ -230,9 +230,9 @@ impl<K: InstrExt> Display for Functions<K>
 
 #[cfg(test)]
 mod tests {
-    use crate::instr::basic::Blocks;
+    use crate::ir::instr::basic::Blocks;
     use crate::samples;
-    use crate::program::read_program;
+    use crate::ir::program::read_program;
 
     #[test]
     fn test_blocks_into_functions() {

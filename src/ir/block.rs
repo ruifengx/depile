@@ -1,6 +1,6 @@
 /*
  * depile: translate three-address code back to C code.
- * Copyright (C) 2021  Ruifeng Xie
+ * Copyright (C) 2022  Ruifeng Xie
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -24,9 +24,8 @@ use thiserror::Error;
 use displaydoc::Display;
 use derivative::Derivative;
 
-use crate::instr::{basic, Branching, HasDest, HasOperand, InstrExt, OutputInfo};
-use crate::program::SourceLine;
-use super::{Instr, Program};
+use crate::ir::instr::{Instr, basic, Branching, HasDest, HasOperand, InstrExt, OutputInfo};
+use crate::ir::program::{Program, SourceLine};
 
 /// Basic block.
 #[derive(Derivative)]
@@ -231,7 +230,7 @@ impl<K: InstrExt> Display for Blocks<K>
 mod tests {
     use super::Blocks;
     use crate::samples;
-    use crate::program::read_program;
+    use crate::ir::program::read_program;
 
     #[test]
     fn test_blocks_from_program() {

@@ -1,6 +1,6 @@
 /*
  * depile: translate three-address code back to C code.
- * Copyright (C) 2021  Ruifeng Xie
+ * Copyright (C) 2022  Ruifeng Xie
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -22,7 +22,7 @@ use parse_display::{Display, FromStr};
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
 
-use crate::instr::basic;
+use crate::ir::instr::basic;
 
 /// A single line in the source program.
 ///

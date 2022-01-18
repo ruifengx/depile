@@ -20,8 +20,8 @@
 
 use std::collections::BTreeSet;
 use smallvec::{SmallVec, smallvec};
-use crate::{Block, Instr, instr::{basic, InstrExt}};
-use crate::instr::{Branching, BranchKind, Never};
+use crate::ir::{Block, Instr};
+use crate::ir::instr::{basic, InstrExt, Branching, BranchKind, Never};
 
 /// Successor blocks.
 pub enum NextBlocks {

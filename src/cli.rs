@@ -19,12 +19,13 @@
 //! Command line interface support.
 
 use std::path::PathBuf;
+use thiserror::Error;
 use displaydoc::Display as DisplayDoc;
 use parse_display::{Display, FromStr};
-use thiserror::Error;
-use clap::{Parser, ArgEnum};
+use clap::{ArgEnum, Parser};
 
-use crate::{block, Blocks, function, program::{self, display_program, read_program}};
+use crate::ir::{block, function, Blocks};
+use crate::ir::program::{self, display_program, read_program};
 
 /// Entry to the command line interface.
 #[derive(Parser)]

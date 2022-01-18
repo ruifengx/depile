@@ -43,15 +43,12 @@
 //! ```csc-output
 //! instr 14: add res_base#32744 GP
 //! ```
-//! Instructions are parsed into [`Instr`]s structurally.
+//! Instructions are parsed into [`ir::Instr`]s structurally.
 
 #![warn(missing_docs)]
 
-pub mod instr;
-pub mod program;
-pub mod block;
-pub mod function;
-pub mod control_flow;
+pub mod ir;
+pub mod analysis;
 
 #[cfg(feature = "cli")]
 pub mod cli;
@@ -61,8 +58,3 @@ pub use cli::Cli;
 
 #[cfg(test)]
 mod samples;
-
-pub use instr::Instr;
-pub use program::Program;
-pub use block::{Block, Blocks};
-pub use function::Function;
