@@ -239,7 +239,6 @@ mod tests {
         for input in samples::ALL_SAMPLES {
             let program = read_program(input).unwrap();
             let blocks = Blocks::try_from(program.as_ref()).unwrap();
-            println!("{}", blocks);
             let functions = blocks.functions().unwrap();
             // to avoid optimizations messing up our tests
             assert!(!functions.functions.is_empty());
