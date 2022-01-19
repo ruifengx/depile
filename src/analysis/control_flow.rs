@@ -19,40 +19,19 @@
 //! Analysis and transformations related to control flows.
 
 use std::collections::BTreeSet;
-use smallvec::{SmallVec, smallvec};
+use itertools::Itertools;
+use smallvec::{SmallVec, ToSmallVec};
 use crate::ir::{Block, Instr};
 use crate::ir::instr::{basic, InstrExt, Branching, BranchKind, Never};
 
 /// Successor blocks.
-pub enum NextBlocks {
-    /// Control flow terminates here: block ends with an [`basic::Marker::Ret`].
-    Terminated,
-    /// Control flow is continuous: block ends with an unconditional branch, or a normal instruction.
-    Continuous(usize),
-    /// Control flow branches here: block ends with a conditional branch.
-    Branching {
-        /// If the condition is not satisfied, the control flow falls through to this block.
-        fallthrough: usize,
-        /// If the condition is satisfied, the control flow branches to this block.
-        branch_to: usize,
-    },
-}
-
-impl IntoIterator for NextBlocks {
-    type Item = usize;
-    type IntoIter = smallvec::IntoIter<[usize; 2]>;
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            NextBlocks::Terminated => SmallVec::new(),
-            NextBlocks::Continuous(m) => smallvec![m],
-            NextBlocks::Branching { fallthrough: m, branch_to: n } => smallvec![m, n],
-        }.into_iter()
-    }
-}
+pub type NextBlocks = SmallVec<[usize; 2]>;
 
 /// A control flow: a series of basic blocks indexed `0..block_count()`, with a successor relation
 /// given by `successor_blocks`. Some helper functions are also provided here.
 pub trait ControlFlow {
+    /// Index of the entry block.
+    fn entry_block_idx(&self) -> usize;
     /// Get the total number of basic blocks in this control flow.
     fn block_count(&self) -> usize;
     /// Which blocks are following this one (in the control flow graph)?
@@ -74,6 +53,73 @@ pub trait ControlFlow {
     }
 }
 
+impl<'a, F: ControlFlow> ControlFlow for &'a F {
+    fn entry_block_idx(&self) -> usize { F::entry_block_idx(self) }
+    fn block_count(&self) -> usize { F::block_count(self) }
+    fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
+        F::successor_blocks(self, block_idx)
+    }
+    fn collect_reachable_into(&self, block_idx: usize, result: &mut BTreeSet<usize>) {
+        F::collect_reachable_into(self, block_idx, result)
+    }
+    fn collect_reachable(&self, block_idx: usize) -> Vec<usize> {
+        F::collect_reachable(self, block_idx)
+    }
+}
+
+/// More control flow related API.
+pub trait ControlFlowExt: ControlFlow {
+    /// The kind of the blocks in this control flow.
+    type BlockKind: InstrExt;
+    /// Get the block content for a given index.
+    fn get_block(&self, block_idx: usize) -> &Block<Self::BlockKind>;
+    /// Get the block content for the entry block, equivalent to [`get_block`] on [`entry_block_idx`].
+    fn entry_block(&self) -> &Block<Self::BlockKind> {
+        self.get_block(self.entry_block_idx())
+    }
+}
+
+impl<'a, F: ControlFlowExt> ControlFlowExt for &'a F {
+    type BlockKind = F::BlockKind;
+    fn get_block(&self, block_idx: usize) -> &Block<Self::BlockKind> {
+        F::get_block(self, block_idx)
+    }
+}
+
+/// Reverse the control flow, and get a dual version.
+pub struct Dual<F> {
+    /// The original control flow.
+    pub base_flow: F,
+    /// The predecessor relation on the original flow, and thus the successor relation on the new.
+    pub predecessors: Vec<Vec<usize>>,
+}
+
+impl<F: ControlFlow> From<F> for Dual<F> {
+    fn from(base: F) -> Dual<F> {
+        let n: usize = base.block_count();
+        let mut predecessors = vec![BTreeSet::new(); n + 1];
+        for block_idx in 0..n {
+            let successors = base.successor_blocks(block_idx);
+            if successors.is_empty() { predecessors[n].insert(block_idx); }
+            for successor in successors {
+                predecessors[successor].insert(block_idx);
+            }
+        }
+        let predecessors = predecessors.into_iter()
+            .map(|set| set.into_iter().collect_vec())
+            .collect_vec();
+        Dual { base_flow: base, predecessors }
+    }
+}
+
+impl<F: ControlFlow> ControlFlow for Dual<F> {
+    fn entry_block_idx(&self) -> usize { self.predecessors.len() - 1 }
+    fn block_count(&self) -> usize { self.base_flow.block_count() }
+    fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
+        self.predecessors[block_idx].to_smallvec()
+    }
+}
+
 /// Behaviour of a branching instruction.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct BranchingBehaviour {
@@ -86,13 +132,12 @@ pub struct BranchingBehaviour {
 impl BranchingBehaviour {
     /// Get the successor blocks for this branching behaviour.
     pub fn get_successor_blocks(self, fallthrough: usize) -> NextBlocks {
-        use NextBlocks::*;
-        match self.alternative_dest {
-            Some(branch_to) if self.might_fallthrough => Branching { fallthrough, branch_to },
-            Some(branch_to) => Continuous(branch_to),
-            None if self.might_fallthrough => Continuous(fallthrough),
-            None => Terminated,
+        let mut result = NextBlocks::new();
+        if self.might_fallthrough { result.push(fallthrough); }
+        if let Some(branch_to) = self.alternative_dest {
+            result.push(branch_to);
         }
+        result
     }
 }
 
@@ -145,8 +190,7 @@ pub fn successor_blocks_impl<K>(blocks: &[Block<K>], block_idx: usize) -> NextBl
           K::Branching: HasBranchingBehaviour,
           K::Marker: HasBranchingBehaviour,
           K::Extra: HasBranchingBehaviour {
-    blocks[block_idx]
-        .instructions.last().unwrap()
+    blocks[block_idx].last_instr()
         .get_branching_behaviour()
         .get_successor_blocks(block_idx + 1)
 }

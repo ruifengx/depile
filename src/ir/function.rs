@@ -21,7 +21,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
-use crate::analysis::control_flow::{ControlFlow, HasBranchingBehaviour, NextBlocks, successor_blocks_impl};
+use crate::analysis::control_flow::{ControlFlow, ControlFlowExt, HasBranchingBehaviour, NextBlocks, successor_blocks_impl};
 use crate::ir::{Instr::*, Block};
 use crate::ir::instr::{basic, stripped, HasDest, InstrExt};
 
@@ -33,15 +33,21 @@ impl basic::Block {
 
     /// Whether or not this block has a [`basic::Marker::Ret`] as its last instruction.
     pub fn is_function_return(&self) -> bool {
-        matches!(self.instructions.last().unwrap(), Marker(basic::Marker::Ret(_)))
+        matches!(self.last_instr(), Marker(basic::Marker::Ret(_)))
     }
 }
 
 impl ControlFlow for basic::Blocks {
+    fn entry_block_idx(&self) -> usize { self.entry_block }
     fn block_count(&self) -> usize { self.blocks.len() }
     fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
         successor_blocks_impl(&self.blocks, block_idx)
     }
+}
+
+impl ControlFlowExt for basic::Blocks {
+    type BlockKind = basic::Kind;
+    fn get_block(&self, block_idx: usize) -> &basic::Block { &self.blocks[block_idx] }
 }
 
 /// A function.
@@ -60,10 +66,19 @@ impl<K: InstrExt> ControlFlow for Function<K>
     where K::Branching: HasBranchingBehaviour,
           K::Marker: HasBranchingBehaviour,
           K::Extra: HasBranchingBehaviour {
+    fn entry_block_idx(&self) -> usize { self.entry_block }
     fn block_count(&self) -> usize { self.blocks.len() }
     fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
         successor_blocks_impl(&self.blocks, block_idx)
     }
+}
+
+impl<K: InstrExt> ControlFlowExt for Function<K>
+    where K::Branching: HasBranchingBehaviour,
+          K::Marker: HasBranchingBehaviour,
+          K::Extra: HasBranchingBehaviour {
+    type BlockKind = K;
+    fn get_block(&self, block_idx: usize) -> &Block<K> { &self.blocks[block_idx] }
 }
 
 /// Collection of functions for a [`Program`](super::Program).

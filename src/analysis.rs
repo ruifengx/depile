@@ -18,5 +18,7 @@
 
 //! Various analyses.
 
+pub mod lattice;
+
 pub mod data_flow;
 pub mod control_flow;

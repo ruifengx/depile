@@ -55,6 +55,10 @@ impl<K: InstrExt> Block<K> {
     pub fn indexed(&self) -> IndexedInstr<K> {
         (self.first_index..).zip(self.instructions.iter())
     }
+    /// The first instruction in this block.
+    pub fn first_instr(&self) -> &Instr<K> { self.instructions.first().unwrap() }
+    /// The last instruction in this block.
+    pub fn last_instr(&self) -> &Instr<K> { self.instructions.last().unwrap() }
 }
 
 impl<K: InstrExt> Display for Block<K>
