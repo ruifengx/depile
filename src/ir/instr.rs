@@ -20,6 +20,7 @@
 
 pub mod basic;
 pub mod stripped;
+pub mod resolved;
 
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
@@ -363,6 +364,11 @@ mod tests {
 /// Replacement for the not yet stable "never" type.
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Never {}
+
+impl Never {
+    /// Get anything from absurdity.
+    pub fn absurd<T>(self) -> T { match self {} }
+}
 
 impl std::str::FromStr for Never {
     type Err = ();

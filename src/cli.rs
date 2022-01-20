@@ -35,7 +35,7 @@ pub struct Cli {
     #[clap(parse(from_os_str))]
     input: PathBuf,
     /// Output format.
-    #[clap(short, long, arg_enum, default_value_t = Format::Functions)]
+    #[clap(short, long, arg_enum, default_value_t = Format::Resolved)]
     target: Format,
 }
 
@@ -49,6 +49,8 @@ pub enum Format {
     Blocks,
     /// Partition the input file as basic blocks, and group the basic blocks into functions.
     Functions,
+    /// Functions with function calls resolved.
+    Resolved,
 }
 
 /// All kinds of errors that might happen during command line execution.
@@ -63,6 +65,8 @@ pub enum Error {
     MalformedBlocks(#[from] block::Error),
     /// failed to group into functions: {0}
     MalformedFunctions(#[from] function::Error),
+    /// failed to resolve function call instructions: {0}
+    CannotResolveFunctionCall(#[from] function::ResolveError),
     /// failed to read file: {0}
     Io(#[from] std::io::Error),
     /// cannot format the output: {0}
@@ -90,6 +94,12 @@ impl Cli {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 let functions = blocks.functions()?;
                 println!("{}", functions);
+            }
+            Format::Resolved => {
+                let blocks = Blocks::try_from(program.as_ref())?;
+                let functions = blocks.functions()?;
+                let resolved = functions.resolve()?;
+                println!("{}", resolved);
             }
         }
         Ok(())

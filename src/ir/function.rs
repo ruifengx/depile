@@ -22,8 +22,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use thiserror::Error;
 use crate::analysis::control_flow::{ControlFlow, ControlFlowExt, HasBranchingBehaviour, NextBlocks, successor_blocks_impl};
-use crate::ir::{Instr::*, Block};
-use crate::ir::instr::{basic, stripped, HasDest, InstrExt};
+use crate::ir::{Instr, Instr::*, Block};
+use crate::ir::instr::{basic, stripped, HasDest, InstrExt, resolved, Never};
 
 impl basic::Block {
     /// Whether or not this block is the entry to some function.
@@ -247,10 +247,110 @@ impl<K: InstrExt> Display for Functions<K>
     }
 }
 
+/// Error during resolving function calls.
+#[derive(Debug, Error)]
+pub enum ResolveError {
+    /// Two function calls and their parameters are interleaved.
+    InterleavedCall((usize, stripped::Instr), (usize, stripped::Instr)),
+    /// Parameter without corresponding function call.
+    OrphanParam(usize, stripped::Operand),
+    /// Not enough parameters for this function call.
+    UnsaturatedCall(usize, usize),
+}
+
+impl Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolveError::InterleavedCall(fst, snd) => {
+                writeln!(f, "these two function calls are interleaved:")?;
+                writeln!(f, "- instr {}: {}", fst.0, fst.1)?;
+                writeln!(f, "- instr {}: {}", snd.0, snd.1)?;
+                Ok(())
+            }
+            ResolveError::OrphanParam(idx, operand) =>
+                writeln!(f, "found orphan param instruction: instr {}: param {}", idx, operand),
+            &ResolveError::UnsaturatedCall(idx, dest) =>
+                writeln!(f, "unsaturated call instruction: instr {}: call [{}]", idx, dest),
+        }
+    }
+}
+
+impl stripped::Functions {
+    fn resolve_block(&self, block: &stripped::Block) -> Result<resolved::Block, ResolveError> {
+        let mut instrs: Vec<resolved::Instr> = Vec::new();
+        let mut last_unsaturated_call: Option<(usize, usize, &stripped::Instr)> = None;
+        let mut remaining_params = 0;
+        for (new, (orig, instr)) in block.index_range().rev()
+            .zip(block.instructions.iter().rev()).enumerate() {
+            match instr {
+                &InterProc(stripped::InterProc::Call { dest }) => {
+                    instrs.push(Instr::InterProc(resolved::InterProc::Call { dest, param_list: Vec::new() }));
+                    if let Some((_, orig_m, instr_m)) = last_unsaturated_call {
+                        return Err(ResolveError::InterleavedCall(
+                            (orig, instr.clone()),
+                            (orig_m, instr_m.clone()),
+                        ));
+                    } else {
+                        last_unsaturated_call = Some((new, orig, instr));
+                        remaining_params = self.functions[dest].parameter_count;
+                    }
+                }
+                InterProc(stripped::InterProc::PushParam(x)) => {
+                    if let Some((new_m, _, _)) = last_unsaturated_call {
+                        remaining_params -= 1;
+                        instrs.push(Instr::Extra(resolved::Extra::Snapshot(x.clone())));
+                        if let Instr::InterProc(ip) = &mut instrs[new_m] {
+                            let resolved::InterProc::Call { param_list, .. } = ip;
+                            param_list.push(resolved::Operand::Register(orig));
+                        } else { unreachable!() }
+                    } else {
+                        return Err(ResolveError::OrphanParam(orig, x.clone()));
+                    }
+                }
+                _ => instrs.push(instr.clone().map_kind(
+                    std::convert::identity,
+                    std::convert::identity,
+                    |_| unreachable!(),
+                    Never::absurd,
+                    Never::absurd,
+                )),
+            }
+            if remaining_params == 0 {
+                if let Some((new_m, _, _)) = last_unsaturated_call {
+                    last_unsaturated_call = None;
+                    if let Instr::InterProc(ip) = &mut instrs[new_m] {
+                        let resolved::InterProc::Call { param_list, .. } = ip;
+                        param_list.reverse();
+                    } else { unreachable!() }
+                }
+            }
+        }
+        instrs.reverse();
+        Ok(resolved::Block { first_index: block.first_index, instructions: instrs.into_boxed_slice() })
+    }
+    fn resolve_function(&self, func: &stripped::Function) -> Result<resolved::Function, ResolveError> {
+        Ok(Function {
+            blocks: func.blocks.iter()
+                .map(|block| self.resolve_block(block))
+                .collect::<Result<_, _>>()?,
+            parameter_count: func.parameter_count,
+            local_var_count: func.local_var_count,
+            entry_block: func.entry_block,
+        })
+    }
+    /// Resolve function calls.
+    pub fn resolve(&self) -> Result<resolved::Functions, ResolveError> {
+        let functions = self.functions.iter()
+            .map(|func| self.resolve_function(func))
+            .collect::<Result<_, _>>()?;
+        Ok(Functions { functions, entry_function: self.entry_function })
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::ir::instr::basic::Blocks;
     use crate::samples;
+    use crate::ir::instr::basic::Blocks;
     use crate::ir::program::read_program;
 
     #[test]
@@ -259,6 +359,18 @@ mod tests {
             let program = read_program(input).unwrap();
             let blocks = Blocks::try_from(program.as_ref()).unwrap();
             let functions = blocks.functions().unwrap();
+            // to avoid optimizations messing up our tests
+            assert!(!functions.functions.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_functions_resolve() {
+        for input in samples::ALL_SAMPLES {
+            let program = read_program(input).unwrap();
+            let blocks = Blocks::try_from(program.as_ref()).unwrap();
+            let functions = blocks.functions().unwrap();
+            let functions = functions.resolve().unwrap();
             // to avoid optimizations messing up our tests
             assert!(!functions.functions.is_empty());
         }

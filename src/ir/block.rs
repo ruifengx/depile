@@ -51,6 +51,10 @@ impl<K: InstrExt> Block<K> {
     pub fn last_index(&self) -> usize {
         self.first_index + self.instructions.len() - 1
     }
+    /// Range of indices of instructions in this block.
+    pub fn index_range(&self) -> std::ops::Range<usize> {
+        self.first_index..self.first_index + self.instructions.len()
+    }
     /// Get iterator into instructions with indices.
     pub fn indexed(&self) -> IndexedInstr<K> {
         (self.first_index..).zip(self.instructions.iter())
@@ -68,8 +72,8 @@ impl<K: InstrExt> Display for Block<K>
           K::InterProc: Display,
           K::Extra: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for instr in self.instructions.iter() {
-            writeln!(f, "  {}", instr)?;
+        for (k, instr) in self.indexed() {
+            writeln!(f, "  instr {}: {}", k, instr)?;
         }
         Ok(())
     }
@@ -204,7 +208,7 @@ impl<'a> TryFrom<&'a Program> for basic::Blocks {
                             ranges.partition_point(|(_, r)| *r < dest)))
                         .collect_vec()
                         .into_boxed_slice(),
-                    first_index: l,
+                    first_index: l + 1,
                 }).collect(),
             entry_block: 1 + is_leader.iter().copied()
                 .take(entries[0])
