@@ -149,16 +149,20 @@ impl basic::Blocks {
                 use basic::Marker::{EnterProc, Ret};
                 remap.insert(block, blocks.len());
                 let block = &self.blocks[block];
-                let first_index = block.first_index;
-                let mut instrs = block.instructions.as_ref();
-                if let [Marker(EnterProc(k)), ..] = instrs {
-                    entries.push((block.first_index, *k));
-                    instrs = instrs.split_first().unwrap().1
-                }
-                if let [.., Marker(Ret(k))] = instrs {
-                    exits.push((block.last_index(), *k));
-                    instrs = instrs.split_last().unwrap().1
-                }
+                let (first_index, instrs) = {
+                    let mut first_index = block.first_index;
+                    let mut instrs = block.instructions.as_ref();
+                    if let [Marker(EnterProc(k)), ..] = instrs {
+                        first_index += 1;
+                        entries.push((block.first_index, *k));
+                        instrs = instrs.split_first().unwrap().1
+                    }
+                    if let [.., Marker(Ret(k))] = instrs {
+                        exits.push((block.last_index(), *k));
+                        instrs = instrs.split_last().unwrap().1
+                    }
+                    (first_index, instrs)
+                };
                 let block: stripped::Block = Block {
                     instructions: instrs.iter()
                         .map(|instr| instr.clone().map_kind(

@@ -73,7 +73,8 @@ pub trait ControlFlowExt: ControlFlow {
     type BlockKind: InstrExt;
     /// Get the block content for a given index.
     fn get_block(&self, block_idx: usize) -> &Block<Self::BlockKind>;
-    /// Get the block content for the entry block, equivalent to [`get_block`] on [`entry_block_idx`].
+    /// Get the block content for the entry block, equivalent to
+    /// [`get_block`](ControlFlowExt::get_block) on [`ControlFlow::entry_block_idx`].
     fn entry_block(&self) -> &Block<Self::BlockKind> {
         self.get_block(self.entry_block_idx())
     }
@@ -117,6 +118,13 @@ impl<F: ControlFlow> ControlFlow for Dual<F> {
     fn block_count(&self) -> usize { self.base_flow.block_count() }
     fn successor_blocks(&self, block_idx: usize) -> NextBlocks {
         self.predecessors[block_idx].to_smallvec()
+    }
+}
+
+impl<F: ControlFlowExt> ControlFlowExt for Dual<F> {
+    type BlockKind = F::BlockKind;
+    fn get_block(&self, block_idx: usize) -> &Block<Self::BlockKind> {
+        F::get_block(&self.base_flow, block_idx)
     }
 }
 

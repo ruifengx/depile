@@ -36,13 +36,23 @@ use std::collections::BTreeSet;
 /// Fortunately, we make no use of the partial order itself in data flow analysis, so this fact
 /// does not make a real obstacle.
 pub trait JoinSemiLattice {
-    /// Update `self` to `self ⊓ other`, returning whether or not the value becomes different.
-    fn join_assign(&mut self, other: Self) -> bool;
     /// The `⊥` element for this semi-lattice: `⊥ ⊓ x = x`.
     fn bottom() -> Self;
+    /// Update `self` to `self ⊓ other`, returning whether or not the value becomes different.
+    fn join_assign(&mut self, other: Self) -> bool;
+    /// Join all of `others` into `self`, returning whether or not the value becomes different.
+    fn join_assign_many(&mut self, others: impl Iterator<Item=Self>) -> bool
+        where Self: Sized {
+        let mut changed = false;
+        for other in others {
+            changed |= self.join_assign(other);
+        }
+        changed
+    }
 }
 
 impl<T: Ord> JoinSemiLattice for BTreeSet<T> {
+    fn bottom() -> BTreeSet<T> { BTreeSet::new() }
     fn join_assign(&mut self, other: Self) -> bool {
         let mut changed = false;
         for x in other {
@@ -50,5 +60,4 @@ impl<T: Ord> JoinSemiLattice for BTreeSet<T> {
         }
         changed
     }
-    fn bottom() -> BTreeSet<T> { BTreeSet::new() }
 }
