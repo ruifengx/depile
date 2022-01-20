@@ -18,11 +18,7 @@
 
 //! (Semi-)Lattice for data flow analysis.
 
-
-
-use std::collections::BTreeSet;
-
-/// Semi-lattice with a `⊔` operation.
+/// Semi-lattice with a `⊓` operation.
 ///
 /// # Note
 /// This trait does not require a [`PartialOrd`], because the partial order implied by the
@@ -35,9 +31,9 @@ use std::collections::BTreeSet;
 ///   fact a total order (a lexicographical order).
 /// Fortunately, we make no use of the partial order itself in data flow analysis, so this fact
 /// does not make a real obstacle.
-pub trait JoinSemiLattice {
+pub trait JoinSemiLattice<Env: ?Sized> {
     /// The `⊥` element for this semi-lattice: `⊥ ⊓ x = x`.
-    fn bottom() -> Self;
+    fn bottom(env: &Env) -> Self;
     /// Update `self` to `self ⊓ other`, returning whether or not the value becomes different.
     fn join_assign(&mut self, other: Self) -> bool;
     /// Join all of `others` into `self`, returning whether or not the value becomes different.
@@ -46,17 +42,6 @@ pub trait JoinSemiLattice {
         let mut changed = false;
         for other in others {
             changed |= self.join_assign(other);
-        }
-        changed
-    }
-}
-
-impl<T: Ord> JoinSemiLattice for BTreeSet<T> {
-    fn bottom() -> BTreeSet<T> { BTreeSet::new() }
-    fn join_assign(&mut self, other: Self) -> bool {
-        let mut changed = false;
-        for x in other {
-            changed |= self.insert(x);
         }
         changed
     }

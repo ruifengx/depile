@@ -28,6 +28,7 @@
 //! [`Marker::EnterProc`]: crate::ir::instr::basic::Marker::EnterProc
 //! [`Marker::Ret`]: crate::ir::instr::basic::Marker::Ret
 
+use crate::analysis::control_flow::ControlFlow;
 use crate::ir::Block;
 use crate::ir::instr::InstrExt;
 use super::control_flow::{Dual, ControlFlowExt};
@@ -42,7 +43,7 @@ pub struct AnalysisRes<T> {
 }
 
 /// Forward data flow analysis.
-pub trait ForwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
+pub trait ForwardAnalysis<K: InstrExt>: JoinSemiLattice<dyn ControlFlow> + Clone + Sized {
     /// The boundary condition: value for the ENTRY block.
     fn v_entry() -> Self;
     /// Transfer function `f` such that `OUT[B] = f(IN[B])`.
@@ -51,9 +52,9 @@ pub trait ForwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
     /// whether or not the `OUT[B]` changed. For monotone frameworks, `IN[B] = f(OUT[B])` can be
     /// substituted with `OUT[B] = OUT[B] ⊓ f(IN[B])`. This allows using
     /// [`JoinSemiLattice::join_assign`] on `OUT[B]`.
-    fn transfer_function(block: &Block<K>, input: &Self, output: &mut Self) -> bool;
+    fn transfer_function(block_idx: usize, block: &Block<K>, input: &Self, output: &mut Self) -> bool;
     /// Run this forward data flow analysis.
-    fn run_forward<F: ControlFlowExt<BlockKind=K>>(flow: F) -> Vec<AnalysisRes<Self>> {
+    fn run_forward<F: ControlFlowExt<BlockKind=K> + 'static>(flow: F) -> Vec<AnalysisRes<Self>> {
         Inverted::<Self>::run_backward(Dual::from(flow)).into_iter()
             .map(|res| AnalysisRes {
                 r#in: res.out.0,
@@ -63,7 +64,7 @@ pub trait ForwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
 }
 
 /// Backward data flow analysis.
-pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
+pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice<dyn ControlFlow> + Clone + Sized {
     /// The boundary condition: value for EXIT blocks.
     fn v_exit() -> Self;
     /// Transfer function `f` such that `IN[B] = f(OUT[B])`.
@@ -72,11 +73,12 @@ pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
     /// whether or not the `IN[B]` changed. For monotone frameworks, `IN[B] = f(OUT[B])` can be
     /// substituted with `IN[B] = IN[B] ⊓ f(OUT[B])`. This allows using
     /// [`JoinSemiLattice::join_assign`] on `IN[B]`.
-    fn transfer_function(block: &Block<K>, input: &mut Self, output: &Self) -> bool;
+    fn transfer_function(block_idx: usize, block: &Block<K>, input: &mut Self, output: &Self) -> bool;
     /// Run this backward data flow analysis.
-    fn run_backward<F: ControlFlowExt<BlockKind=K>>(flow: F) -> Vec<AnalysisRes<Self>> {
-        let mut r#in = vec![Self::bottom(); flow.block_count()];
-        let mut out = vec![Self::bottom(); flow.block_count()];
+    fn run_backward<F: ControlFlowExt<BlockKind=K> + 'static>(flow: F) -> Vec<AnalysisRes<Self>> {
+        let bottom = Self::bottom(&flow);
+        let mut r#in = vec![bottom.clone(); flow.block_count()];
+        let mut out = vec![bottom; flow.block_count()];
         #[allow(clippy::needless_range_loop)]
         for block_idx in 0..flow.block_count() {
             if flow.successor_blocks(block_idx).is_empty() {
@@ -93,7 +95,7 @@ pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
                     flow.successor_blocks(block_idx).into_iter()
                         .map(|successor| r#in[successor].clone())
                 );
-                Self::transfer_function(block, &mut r#in[block_idx], &out[block_idx]);
+                Self::transfer_function(block_idx, block, &mut r#in[block_idx], &out[block_idx]);
             }
         }
         itertools::zip_eq(r#in.into_iter(), out.into_iter())
@@ -106,8 +108,8 @@ pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
 #[derive(Default, Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 struct Inverted<T>(T);
 
-impl<T: JoinSemiLattice> JoinSemiLattice for Inverted<T> {
-    fn bottom() -> Self { Inverted(T::bottom()) }
+impl<Env: ?Sized, T: JoinSemiLattice<Env>> JoinSemiLattice<Env> for Inverted<T> {
+    fn bottom(env: &Env) -> Self { Inverted(T::bottom(env)) }
     fn join_assign(&mut self, other: Self) -> bool {
         T::join_assign(&mut self.0, other.0)
     }
@@ -115,7 +117,7 @@ impl<T: JoinSemiLattice> JoinSemiLattice for Inverted<T> {
 
 impl<K: InstrExt, T: ForwardAnalysis<K>> BackwardAnalysis<K> for Inverted<T> {
     fn v_exit() -> Self { Inverted(T::v_entry()) }
-    fn transfer_function(block: &Block<K>, input: &mut Self, output: &Self) -> bool {
-        T::transfer_function(block, &output.0, &mut input.0)
+    fn transfer_function(block_idx: usize, block: &Block<K>, input: &mut Self, output: &Self) -> bool {
+        T::transfer_function(block_idx, block, &output.0, &mut input.0)
     }
 }
