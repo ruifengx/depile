@@ -19,6 +19,8 @@
 //! Stripped instructions for use in [`Function`](ir::Function)s.
 
 use crate::ir;
+use parse_display::{Display, FromStr};
+use crate::analysis::control_flow::{BranchingBehaviour, HasBranchingBehaviour};
 
 /// Kind "stripped" use the same operand, as well as the same branching, inter-procedural, and
 /// extra instructions as kind "basic".
@@ -30,8 +32,19 @@ pub type Kind = ir::instr::Kind<Operand, Branching, Marker, InterProc, Extra>;
 /// [`Instr`](ir::Instr)uction with kind "stripped".
 pub type Instr = ir::Instr<Kind>;
 
-/// Kind "stripped" has no marker instructions.
-pub type Marker = super::Never;
+/// Marker instructions for kind "stripped".
+#[derive(Debug, Display, FromStr, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub enum Marker {
+    /// Mark the end of a function.
+    #[display("ret")]
+    Ret,
+}
+
+impl HasBranchingBehaviour for Marker {
+    fn get_branching_behaviour(&self) -> BranchingBehaviour {
+        BranchingBehaviour { alternative_dest: None, might_fallthrough: false }
+    }
+}
 
 /// [`Block`](ir::Block) with kind "stripped".
 pub type Block = ir::Block<Kind>;

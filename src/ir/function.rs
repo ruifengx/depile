@@ -20,6 +20,7 @@
 
 use std::collections::HashMap;
 use std::fmt::Display;
+use itertools::Itertools;
 use thiserror::Error;
 use crate::analysis::control_flow::{ControlFlow, ControlFlowExt, HasBranchingBehaviour, NextBlocks, successor_blocks_impl};
 use crate::ir::{Instr, Instr::*, Block};
@@ -149,6 +150,7 @@ impl basic::Blocks {
                 use basic::Marker::{EnterProc, Ret};
                 remap.insert(block, blocks.len());
                 let block = &self.blocks[block];
+                let mut is_return = false;
                 let (first_index, instrs) = {
                     let mut first_index = block.first_index;
                     let mut instrs = block.instructions.as_ref();
@@ -158,22 +160,23 @@ impl basic::Blocks {
                         instrs = instrs.split_first().unwrap().1
                     }
                     if let [.., Marker(Ret(k))] = instrs {
+                        is_return = true;
                         exits.push((block.last_index(), *k));
                         instrs = instrs.split_last().unwrap().1
                     }
                     (first_index, instrs)
                 };
-                let block: stripped::Block = Block {
-                    instructions: instrs.iter()
-                        .map(|instr| instr.clone().map_kind(
-                            std::convert::identity,
-                            std::convert::identity,
-                            std::convert::identity,
-                            |m| panic!("m: {}", m),
-                            std::convert::identity,
-                        )).collect(),
-                    first_index,
-                };
+                let mut instructions = instrs.iter()
+                    .map(|instr| instr.clone().map_kind(
+                        std::convert::identity,
+                        std::convert::identity,
+                        std::convert::identity,
+                        |m| panic!("m: {}", m),
+                        std::convert::identity,
+                    )).collect_vec();
+                if is_return { instructions.push(Instr::Marker(stripped::Marker::Ret)); }
+                let instructions = instructions.into_boxed_slice();
+                let block: stripped::Block = Block { instructions, first_index };
                 blocks.push(block);
             }
             for block in &mut blocks {
@@ -311,7 +314,7 @@ impl stripped::Functions {
                     std::convert::identity,
                     std::convert::identity,
                     |_| unreachable!(),
-                    Never::absurd,
+                    std::convert::identity,
                     Never::absurd,
                 )),
             }
