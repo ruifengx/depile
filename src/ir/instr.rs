@@ -313,7 +313,9 @@ mod tests {
             "FP" => Operand::FP,
             "42" => Operand::Const(42),
             "(42)" => Operand::Register(42),
-            "y_offset#8" => Operand::Offset("y_offset".to_string(), 8),
+            "y_offset#8" => Operand::FieldOffset("y".to_string(), 8),
+            "x_base#32760" => Operand::BaseAddress("x".to_string(), 32760),
+            "a#-8" => Operand::Var("a".to_string(), -8),
         }
     }
 
@@ -325,11 +327,11 @@ mod tests {
             "add (41) y_offset#8" => Instr::Binary {
                 op: BOp::Add,
                 lhs: Operand::Register(41),
-                rhs: Operand::Offset("y_offset".to_string(), 8),
+                rhs: Operand::FieldOffset("y".to_string(), 8),
             },
             "neg a#24" => Instr::Unary {
                 op: UOp::Neg,
-                operand: Operand::Offset("a".to_string(), 24),
+                operand: Operand::Var("a".to_string(), 24),
             },
             // branching
             "blbs (36) [46]" => Instr::Branch(Branching {
@@ -342,8 +344,8 @@ mod tests {
             // moving
             "load (13)" => Instr::Load(Operand::Register(13)),
             "move i#-8 j#-16" => Instr::Move {
-                source: Operand::Offset("i".to_string(), -8),
-                dest: Operand::Offset("j".to_string(), -16),
+                source: Operand::Var("i".to_string(), -8),
+                dest: Operand::Var("j".to_string(), -16),
             },
             "store (15) (11)" => Instr::Store {
                 data: Operand::Register(15),
@@ -351,7 +353,7 @@ mod tests {
             },
             // input & output
             "read" => Instr::Read,
-            "write x#-64" => Instr::Write(Operand::Offset("x".to_string(), -64)),
+            "write x#-64" => Instr::Write(Operand::Var("x".to_string(), -64)),
             "wrl" => Instr::WriteLn,
             // function related markups
             "entrypc" => Instr::Marker(Marker::EntryPc),

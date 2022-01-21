@@ -119,9 +119,15 @@ pub enum Operand {
     /// Integer literal.
     #[display("{0}")]
     Const(i64),
-    /// Global offset, field offset, or stack offset.
+    /// Global offset or array base.
+    #[display("{0}_base#{1}")]
+    BaseAddress(String, i64),
+    /// Field offset.
+    #[display("{0}_offset#{1}")]
+    FieldOffset(String, i64),
+    /// Stack variables.
     #[display("{0}#{1}")]
-    Offset(String, i64),
+    Var(String, i64),
     /// Virtual register for instruction outputs.
     #[display("({0})")]
     Register(usize),
