@@ -28,6 +28,8 @@
 //! [`Marker::EnterProc`]: crate::ir::instr::basic::Marker::EnterProc
 //! [`Marker::Ret`]: crate::ir::instr::basic::Marker::Ret
 
+pub mod dominator;
+
 use crate::ir::Block;
 use crate::ir::instr::InstrExt;
 use super::control_flow::{Dual, ControlFlowExt};
