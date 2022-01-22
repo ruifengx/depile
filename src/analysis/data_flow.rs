@@ -44,7 +44,7 @@ pub struct AnalysisRes<T> {
 }
 
 /// Forward data flow analysis.
-pub trait ForwardAnalysis<K: InstrExt>: JoinSemiLattice<K> + Clone + Sized {
+pub trait ForwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
     /// The boundary condition: value for the ENTRY block.
     fn v_entry() -> Self;
     /// Transfer function `f` such that `OUT[B] = f(IN[B])`.
@@ -65,7 +65,7 @@ pub trait ForwardAnalysis<K: InstrExt>: JoinSemiLattice<K> + Clone + Sized {
 }
 
 /// Backward data flow analysis.
-pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice<K> + Clone + Sized {
+pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice + Clone + Sized {
     /// The boundary condition: value for EXIT blocks.
     fn v_exit() -> Self;
     /// Transfer function `f` such that `IN[B] = f(OUT[B])`.
@@ -109,8 +109,8 @@ pub trait BackwardAnalysis<K: InstrExt>: JoinSemiLattice<K> + Clone + Sized {
 #[derive(Default, Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 struct Inverted<T>(T);
 
-impl<K: InstrExt, T: JoinSemiLattice<K>> JoinSemiLattice<K> for Inverted<T> {
-    fn bottom(env: &dyn ControlFlowExt<BlockKind=K>) -> Self { Inverted(T::bottom(env)) }
+impl<T: JoinSemiLattice> JoinSemiLattice for Inverted<T> {
+    fn bottom<K: InstrExt>(env: &dyn ControlFlowExt<BlockKind=K>) -> Self { Inverted(T::bottom(env)) }
     fn join_assign(&mut self, other: Self) -> bool {
         T::join_assign(&mut self.0, other.0)
     }

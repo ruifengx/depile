@@ -34,9 +34,9 @@ use crate::ir::instr::InstrExt;
 ///   fact a total order (a lexicographical order).
 /// Fortunately, we make no use of the partial order itself in data flow analysis, so this fact
 /// does not make a real obstacle.
-pub trait JoinSemiLattice<K: InstrExt> {
+pub trait JoinSemiLattice {
     /// The `⊥` element for this semi-lattice: `⊥ ⊓ x = x`.
-    fn bottom(env: &dyn ControlFlowExt<BlockKind=K>) -> Self;
+    fn bottom<K: InstrExt>(env: &dyn ControlFlowExt<BlockKind=K>) -> Self;
     /// Update `self` to `self ⊓ other`, returning whether or not the value becomes different.
     fn join_assign(&mut self, other: Self) -> bool;
     /// Join all of `others` into `self`, returning whether or not the value becomes different.
