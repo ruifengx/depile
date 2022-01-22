@@ -21,6 +21,7 @@
 pub mod basic;
 pub mod stripped;
 pub mod resolved;
+pub mod structured;
 
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;

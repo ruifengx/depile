@@ -35,7 +35,7 @@ pub struct Cli {
     #[clap(parse(from_os_str))]
     input: PathBuf,
     /// Output format.
-    #[clap(short, long, arg_enum, default_value_t = Format::Resolved)]
+    #[clap(short, long, arg_enum, default_value_t = Format::Structured)]
     target: Format,
 }
 
@@ -51,6 +51,8 @@ pub enum Format {
     Functions,
     /// Functions with function calls resolved.
     Resolved,
+    /// Functions with structured control flow.
+    Structured,
 }
 
 /// All kinds of errors that might happen during command line execution.
@@ -100,6 +102,13 @@ impl Cli {
                 let functions = blocks.functions()?;
                 let resolved = functions.resolve()?;
                 println!("{}", resolved);
+            }
+            Format::Structured => {
+                let blocks = Blocks::try_from(program.as_ref())?;
+                let functions = blocks.functions()?;
+                let resolved = functions.resolve()?;
+                let structured = resolved.to_structured();
+                println!("{}", structured);
             }
         }
         Ok(())

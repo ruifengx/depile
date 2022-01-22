@@ -29,6 +29,7 @@ use ir::instr::{HasDest, HasOperand, OutputInfo};
 
 pub use basic::{Operand, Branching};
 pub use stripped::Marker;
+use crate::analysis::control_flow::{BranchingBehaviour, HasBranchingBehaviour};
 
 /// Instruction kind "resolved".
 pub type Kind = ir::instr::Kind<Operand, Branching, Marker, InterProc, Extra>;
@@ -97,6 +98,11 @@ pub enum Extra {
     Snapshot(Operand),
 }
 
+impl HasBranchingBehaviour for Extra {
+    fn get_branching_behaviour(&self) -> BranchingBehaviour {
+        BranchingBehaviour { might_fallthrough: true, alternative_dest: None }
+    }
+}
 
 impl HasOperand<Operand> for Extra {
     fn get_operands(&self) -> SmallVec<[&Operand; 2]> {

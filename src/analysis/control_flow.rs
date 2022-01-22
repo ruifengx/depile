@@ -19,7 +19,6 @@
 //! Analysis and transformations related to control flows.
 
 use std::collections::BTreeSet;
-use itertools::Itertools;
 use smallvec::{SmallVec, ToSmallVec};
 use crate::ir::{Block, Instr};
 use crate::ir::instr::{basic, InstrExt, Branching, BranchKind, Never};
@@ -92,7 +91,7 @@ pub struct Dual<F> {
     /// The original control flow.
     pub base_flow: F,
     /// The predecessor relation on the original flow, and thus the successor relation on the new.
-    pub predecessors: Vec<Vec<usize>>,
+    pub predecessors: Box<[Box<[usize]>]>,
 }
 
 impl<F: ControlFlow> From<F> for Dual<F> {
@@ -107,8 +106,8 @@ impl<F: ControlFlow> From<F> for Dual<F> {
             }
         }
         let predecessors = predecessors.into_iter()
-            .map(|set| set.into_iter().collect_vec())
-            .collect_vec();
+            .map(|set| set.into_iter().collect::<Box<[_]>>())
+            .collect::<Box<[_]>>();
         Dual { base_flow: base, predecessors }
     }
 }
