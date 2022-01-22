@@ -181,22 +181,7 @@ fn lift_block_iter(first_index: usize, instructions: &[resolved::Instr])
         std::convert::identity,
         |_| unreachable!(),
         std::convert::identity,
-    ))).inspect(|(k, instr)| {
-        pr_indent();
-        println!("  instr {}: {}", k, instr);
-    })
-}
-
-static mut INDENT: usize = 0;
-
-fn indent() -> usize { unsafe { INDENT } }
-
-fn increase_indent() { unsafe { INDENT += 1 } }
-
-fn decrease_indent() { unsafe { INDENT -= 1 } }
-
-fn pr_indent() {
-    print!("{:indent$}", "", indent = indent() * 2);
+    )))
 }
 
 struct ToStructured<'a> {
@@ -208,7 +193,6 @@ impl<'a> ToStructured<'a> {
     fn run(&mut self, mut block_idx: usize, output: &mut Vec<(usize, Instr)>) -> Context {
         loop {
             let context = self.run_single(block_idx, output);
-            // dbg!(&context);
             if context.last_is_br.is_some() || context.ret_seen
                 || self.dominators[context.fallthrough_to]
                 .binary_search(&context.block_idx).is_err() { break context; }
@@ -217,33 +201,15 @@ impl<'a> ToStructured<'a> {
     }
 
     fn run_single(&mut self, block_idx: usize, output: &mut Vec<(usize, Instr)>) -> Context {
-        struct Guard(usize);
-        impl Drop for Guard {
-            fn drop(&mut self) {
-                decrease_indent();
-                pr_indent();
-                println!("finished visiting Block #{} ...", self.0);
-            }
-        }
-        let _guard = Guard(block_idx);
-        pr_indent();
-        println!("visiting Block #{} ...", block_idx);
-        increase_indent();
         let block = &self.function.blocks[block_idx];
         if let ir::Instr::Marker(resolved::Marker::Ret) = block.last_instr() {
-            pr_indent();
-            println!("ret found!");
             let (_, instrs) = block.instructions.split_last().unwrap();
             output.extend(lift_block_iter(block.first_index, instrs));
             Context { block_idx, last_is_br: None, fallthrough_to: block_idx + 1, ret_seen: true }
         } else if let ir::Instr::Branch(br) = block.last_instr() {
-            pr_indent();
-            println!("hmm, a branching instruction ...");
             let (_, instrs) = block.instructions.split_last().unwrap();
             let (condition, negation) = match &br.method {
                 BranchKind::Unconditional => {
-                    pr_indent();
-                    println!("it's a `br`! returning to caller ...");
                     output.extend(lift_block_iter(block.first_index, instrs));
                     return Context {
                         block_idx,
@@ -257,14 +223,10 @@ impl<'a> ToStructured<'a> {
             };
             let preparation = lift_block_iter(block.first_index, instrs).collect();
             let condition = Condition { value: condition, negation, preparation };
-            pr_indent();
-            println!("conditional jump found, examining its body (Block #{}) ...", block_idx + 1);
             let mut body = Vec::new();
             let body_ctxt = self.run(block_idx + 1, &mut body);
             if let Some(body_br) = body_ctxt.last_is_br {
                 if body_br > block_idx { // forward br: if-then-else
-                    pr_indent();
-                    println!("forward jump found! (if-then-else) looking for else branch ...");
                     assert_eq!(br.dest, body_ctxt.fallthrough_to);
                     let mut else_branch = Vec::new();
                     let ctxt = self.run(br.dest, &mut else_branch);
@@ -277,8 +239,6 @@ impl<'a> ToStructured<'a> {
                     })));
                     Context { block_idx, fallthrough_to: body_br, last_is_br: None, ret_seen: false }
                 } else { // backward br: while
-                    pr_indent();
-                    println!("backward jump found! (while)");
                     assert_eq!(body_br, block_idx);
                     assert_eq!(br.dest, body_ctxt.fallthrough_to);
                     let loop_body = body.into_boxed_slice();
@@ -289,8 +249,6 @@ impl<'a> ToStructured<'a> {
                     Context { block_idx, fallthrough_to: br.dest, last_is_br: None, ret_seen: false }
                 }
             } else { // no br: if-then
-                pr_indent();
-                println!("no jump at all! (if-then)");
                 assert_eq!(br.dest, body_ctxt.fallthrough_to);
                 output.push((block.last_index(), Instr::Branch(Branching::If {
                     condition,
@@ -310,10 +268,7 @@ impl resolved::Function {
     /// Transforms the function into structured [`Function`]s.
     pub fn to_structured(&self) -> Function {
         let mut body = Vec::new();
-        let mut runner = ToStructured {
-            function: self,
-            dominators: dbg!(get_dominators(self)),
-        };
+        let mut runner = ToStructured { function: self, dominators: get_dominators(self) };
         let ctxt = runner.run(self.entry_block, &mut body);
         assert_eq!(ctxt.last_is_br, None);
         assert!(ctxt.ret_seen);
