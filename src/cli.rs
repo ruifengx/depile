@@ -25,6 +25,7 @@ use parse_display::{Display, FromStr};
 use clap::{ArgEnum, Parser};
 
 use crate::ir::{block, function, Blocks};
+use crate::ir::c::ToC;
 use crate::ir::program::{self, display_program, read_program};
 
 /// Entry to the command line interface.
@@ -35,7 +36,7 @@ pub struct Cli {
     #[clap(parse(from_os_str))]
     input: PathBuf,
     /// Output format.
-    #[clap(short, long, arg_enum, default_value_t = Format::Structured)]
+    #[clap(short, long, arg_enum, default_value_t = Format::C)]
     target: Format,
 }
 
@@ -53,6 +54,8 @@ pub enum Format {
     Resolved,
     /// Functions with structured control flow.
     Structured,
+    /// C-style code.
+    C,
 }
 
 /// All kinds of errors that might happen during command line execution.
@@ -109,6 +112,13 @@ impl Cli {
                 let resolved = functions.resolve()?;
                 let structured = resolved.to_structured();
                 println!("{}", structured);
+            }
+            Format::C => {
+                let blocks = Blocks::try_from(program.as_ref())?;
+                let functions = blocks.functions()?;
+                let resolved = functions.resolve()?;
+                let structured = resolved.to_structured();
+                println!("{}", structured.to_c_code());
             }
         }
         Ok(())

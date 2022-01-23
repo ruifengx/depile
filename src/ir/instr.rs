@@ -251,6 +251,7 @@ impl<Operand, K: InstrExt<Operand=Operand>> HasOperand<Operand> for Instr<K>
             Load(operand) => smallvec![operand],
             Store { data, address } => smallvec![data, address],
             Write(operand) => smallvec![operand],
+            Branch(br) => br.get_operands(),
             InterProc(inter) => inter.get_operands(),
             Extra(extra) => extra.get_operands(),
             _ => SmallVec::new(),

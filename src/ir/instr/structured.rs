@@ -20,8 +20,10 @@
 //! successor blocks. Raw `goto`s are eliminated, and all of them are turned into control flow
 //! structures.
 
+use std::collections::BTreeSet;
 use std::fmt::{Arguments, Display, Formatter, Write};
-use crate::ir::{self, instr::{BranchKind, resolved}};
+use smallvec::SmallVec;
+use crate::ir::{self, instr::{resolved, BranchKind, OutputInfo, HasOperand}};
 use crate::analysis::data_flow::dominator::{DomRel, get_dominators};
 
 pub use ir::instr::{
@@ -109,7 +111,34 @@ pub enum Branching {
     },
 }
 
-fn write_indented<W>(f: &mut W, v: Arguments, buffer: &mut String) -> std::fmt::Result
+impl HasOperand<Operand> for Branching {
+    fn get_operands(&self) -> SmallVec<[&Operand; 2]> {
+        let mut result = BTreeSet::new();
+        let blocks = match self {
+            Branching::If { condition, then_branch, else_branch } => {
+                let mut blocks = vec![condition.preparation.as_ref(), then_branch];
+                if let Some(else_branch) = else_branch {
+                    blocks.push(else_branch);
+                }
+                blocks
+            }
+            Branching::While { condition, loop_body } =>
+                vec![condition.preparation.as_ref(), loop_body],
+        };
+        for block in blocks {
+            for (_, instr) in block {
+                result.extend(instr.get_operands());
+            }
+        }
+        result.into_iter().collect()
+    }
+}
+
+impl OutputInfo for Branching {
+    fn has_output(&self) -> bool { false }
+}
+
+pub(crate) fn write_indented<W>(f: &mut W, v: Arguments, buffer: &mut String) -> std::fmt::Result
     where W: Write + ?Sized {
     buffer.clear();
     writeln!(buffer, "{}", v)?;

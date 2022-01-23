@@ -21,6 +21,7 @@ pub mod instr;
 pub mod program;
 pub mod block;
 pub mod function;
+pub mod c;
 
 pub use instr::Instr;
 pub use program::Program;
