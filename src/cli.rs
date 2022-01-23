@@ -24,7 +24,7 @@ use displaydoc::Display as DisplayDoc;
 use parse_display::{Display, FromStr};
 use clap::{ArgEnum, Parser};
 
-use crate::ir::{block, function, Blocks, c_inline};
+use crate::ir::{block, function, Blocks, c};
 use crate::ir::program::{self, display_program, read_program};
 
 /// Entry to the command line interface.
@@ -75,7 +75,7 @@ pub enum Error {
     /// failed to resolve function call instructions: {0}
     CannotResolveFunctionCall(#[from] function::ResolveError),
     /// failed to convert to C functions: {0}
-    CCodegenFailure(#[from] c_inline::Error),
+    CCodegenFailure(#[from] c::Error),
     /// failed to read file: {0}
     Io(#[from] std::io::Error),
     /// cannot format the output: {0}
