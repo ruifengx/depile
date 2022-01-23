@@ -35,7 +35,7 @@ pub enum Expr {
     Neg(Box<Expr>),
     Deref(Box<Expr>),
     Read,
-    Var(i64),
+    Var(u64),
     Param(String),
     Const(i64),
     FP,
@@ -51,11 +51,11 @@ impl Display for Expr {
             Expr::Neg(expr) => write!(f, "-{expr}"),
             Expr::Deref(expr) => write!(f, "DEREF({expr})"),
             Expr::Read => write!(f, "ReadLong()"),
-            Expr::Var(x) => write!(f, "{x}"),
+            Expr::Var(x) => write!(f, "VAR({x})"),
             Expr::Param(x) => write!(f, "{x}"),
             Expr::Const(c) => write!(f, "{c}"),
-            Expr::FP => write!(f, "frame_storage"),
-            Expr::GP => write!(f, "global_storage"),
+            Expr::FP => write!(f, "FP"),
+            Expr::GP => write!(f, "GP"),
         }
     }
 }
@@ -106,7 +106,7 @@ impl Display for Statement {
             Statement::Write(x) => write!(f, "WriteLong({x});"),
             Statement::WriteLn => write!(f, "WriteLn();"),
             Statement::Call(t, params) =>
-                write!(f, "global_function_{t}({})", params.iter().format(", ")),
+                write!(f, "global_function_{t}({});", params.iter().format(", ")),
             Statement::If { condition, then_branch, else_branch } => {
                 write!(f, "if ({condition}) {}", Braced(then_branch))?;
                 if let Some(else_branch) = else_branch {
@@ -152,6 +152,7 @@ const PRELUDE: &str = indoc::indoc! {r#"
     typedef char *ADDR;
 
     #define DEREF(p) (*(WORD *) (p))
+    #define VAR(n) (*(((WORD *) FP) - n - 1))
     inline WORD ReadLone() {
         WORD x = 0;
         scanf("%" PRIu64, &x);
@@ -165,7 +166,7 @@ const PRELUDE: &str = indoc::indoc! {r#"
     }
 
     static WORD global_back_buffer[32768 / 8];
-    const ADDR global_storage = (ADDR) global_back_buffer;
+    const ADDR GP = (ADDR) global_back_buffer;
 "#};
 
 impl Display for Functions {
@@ -176,6 +177,7 @@ impl Display for Functions {
                 .format_with(", ", |x, k| k(&format_args!("WORD {x}"))))?;
             if func.local_var_count > 0 {
                 writeln!(f, "  WORD frame_storage[{}] = {{0}};", func.local_var_count)?;
+                writeln!(f, "  ADDR FP = (ADDR) (frame_storage + {});", func.local_var_count)?;
             }
             writeln!(f, "{}}}\n", Indented(&func.body))?;
         }
@@ -229,7 +231,7 @@ impl Conversion {
             Operand::BaseAddress(_, k) => Expr::Const(*k),
             Operand::FieldOffset(_, k) => Expr::Const(*k),
             Operand::Var(x, k) if *k > 0 => Expr::Param(x.clone()),
-            Operand::Var(_, k) => Expr::Var(*k),
+            Operand::Var(_, k) => Expr::Var((-*k as u64 - 8) / 8),
             Operand::Register(r) => self.get_register(*r)?,
         })
     }
