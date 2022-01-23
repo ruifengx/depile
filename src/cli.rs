@@ -24,7 +24,7 @@ use displaydoc::Display as DisplayDoc;
 use parse_display::{Display, FromStr};
 use clap::{ArgEnum, Parser};
 
-use crate::ir::{block, function, Blocks, c};
+use crate::ir::{block, function, c, Blocks};
 use crate::ir::program::{self, display_program, read_program};
 
 /// Entry to the command line interface.

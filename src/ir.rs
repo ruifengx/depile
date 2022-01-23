@@ -23,6 +23,8 @@ pub mod block;
 pub mod function;
 pub mod c;
 
+mod flatten;
+
 pub use instr::Instr;
 pub use program::Program;
 pub use block::{Block, Blocks};
