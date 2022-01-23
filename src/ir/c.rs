@@ -104,7 +104,7 @@ impl Display for Statement {
         match self {
             Statement::Assigment { dest, source } => write!(f, "{dest} = {source};"),
             Statement::Write(x) => write!(f, "WriteLong({x});"),
-            Statement::WriteLn => write!(f, "WriteLn();"),
+            Statement::WriteLn => write!(f, "WriteLine();"),
             Statement::Call(t, params) =>
                 write!(f, "global_function_{t}({});", params.iter().format(", ")),
             Statement::If { condition, then_branch, else_branch } => {
@@ -148,20 +148,20 @@ const PRELUDE: &str = indoc::indoc! {r#"
     #include <stdio.h>
     #include <inttypes.h>
 
-    typedef uint64_t WORD;
+    typedef int64_t WORD;
     typedef char *ADDR;
 
     #define DEREF(p) (*(WORD *) (p))
     #define VAR(n) (*(((WORD *) FP) - n - 1))
     inline WORD ReadLong() {
         WORD x = 0;
-        scanf("%" PRIu64, &x);
+        scanf("%" PRId64, &x);
         return x;
     }
     inline void WriteLong(WORD x) {
-        printf(" %" PRIu64, x);
+        printf(" %" PRId64, x);
     }
-    inline void WriteLn() {
+    inline void WriteLine() {
         printf("\n");
     }
 
@@ -242,9 +242,9 @@ impl Conversion {
         match br {
             Branching::If { condition, then_branch, else_branch } => {
                 let c_cond = self.derived_on(condition.preparation.as_ref())?;
-                assert!(c_cond.output.is_empty(), "condition should not produce true statements");
                 let negation = condition.negation;
                 let mut condition = c_cond.handle_operand(&condition.value)?;
+                self.output.extend(c_cond.output.into_iter());
                 if negation { condition = Expr::Not(Box::new(condition)); }
                 let c_then = self.derived_on(then_branch.as_ref())?;
                 let then_branch = c_then.output.into_boxed_slice();
