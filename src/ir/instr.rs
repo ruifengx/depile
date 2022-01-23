@@ -45,12 +45,35 @@ pub enum BOp {
     CmpLt,
 }
 
+impl BOp {
+    /// Pretty-print binary operators.
+    pub fn pretty(self) -> &'static str {
+        match self {
+            BOp::Add => "+",
+            BOp::Sub => "-",
+            BOp::Mul => "*",
+            BOp::Div => "/",
+            BOp::Mod => "%",
+            BOp::CmpEq => "==",
+            BOp::CmpLe => "<=",
+            BOp::CmpLt => "<",
+        }
+    }
+}
+
 /// Unary operators.
 #[derive(Debug, Display, FromStr, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[display(style = "lowercase")]
 #[allow(missing_docs)]
 pub enum UOp {
     Neg,
+}
+
+impl UOp {
+    /// Pretty-print unary operators.
+    pub fn pretty(self) -> &'static str {
+        match self { UOp::Neg => "-" }
+    }
 }
 
 /// Branching methods.

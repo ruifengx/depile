@@ -50,6 +50,29 @@ pub struct Function {
     pub body: Block,
 }
 
+impl Function {
+    /// Get list of parameter names.
+    pub fn param_list(&self) -> Vec<String> {
+        let mut params = vec![String::new(); self.parameter_count as usize];
+        for (_, instr) in self.body.as_ref() {
+            for operand in instr.get_operands() {
+                if let Operand::Var(x, k) = operand {
+                    if *k > 0 {
+                        params[((*k - 16) / 8) as usize] = x.clone();
+                    }
+                }
+            }
+        }
+        params.reverse();
+        for (k, param) in params.iter_mut().enumerate() {
+            if param.is_empty() {
+                *param = format!("ignored_param_{}", k);
+            }
+        }
+        params
+    }
+}
+
 impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "#parameters = {}", self.parameter_count)?;
@@ -247,8 +270,9 @@ impl<'a> ToStructured<'a> {
                         ret_seen: false,
                     };
                 }
-                BranchKind::If(cond) => (cond.clone(), false),
-                BranchKind::Unless(cond) => (cond.clone(), true),
+                // note that negation is flipped because of the control flow structure
+                BranchKind::If(cond) => (cond.clone(), true),
+                BranchKind::Unless(cond) => (cond.clone(), false),
             };
             let preparation = lift_block_iter(block.first_index, instrs).collect();
             let condition = Condition { value: condition, negation, preparation };

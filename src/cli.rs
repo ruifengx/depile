@@ -24,8 +24,7 @@ use displaydoc::Display as DisplayDoc;
 use parse_display::{Display, FromStr};
 use clap::{ArgEnum, Parser};
 
-use crate::ir::{block, function, Blocks};
-use crate::ir::c::ToC;
+use crate::ir::{block, function, Blocks, c_inline};
 use crate::ir::program::{self, display_program, read_program};
 
 /// Entry to the command line interface.
@@ -35,6 +34,9 @@ pub struct Cli {
     /// The input three-address code source file.
     #[clap(parse(from_os_str))]
     input: PathBuf,
+    /// The output file.
+    #[clap(short, long, parse(from_os_str))]
+    output: Option<PathBuf>,
     /// Output format.
     #[clap(short, long, arg_enum, default_value_t = Format::C)]
     target: Format,
@@ -72,6 +74,8 @@ pub enum Error {
     MalformedFunctions(#[from] function::Error),
     /// failed to resolve function call instructions: {0}
     CannotResolveFunctionCall(#[from] function::ResolveError),
+    /// failed to convert to C functions: {0}
+    CCodegenFailure(#[from] c_inline::Error),
     /// failed to read file: {0}
     Io(#[from] std::io::Error),
     /// cannot format the output: {0}
@@ -87,38 +91,52 @@ impl Cli {
         let options: Cli = Cli::try_parse()?;
         let contents = std::fs::read_to_string(&options.input)?;
         let program = read_program(&contents)?;
+        // handle the output part
+        let f: &mut dyn std::io::Write;
+        let mut file;
+        let stdout;
+        let mut stdout_lock;
+        if let Some(p) = options.output {
+            file = std::fs::File::create(p)?;
+            f = &mut file;
+        } else {
+            stdout = std::io::stdout();
+            stdout_lock = stdout.lock();
+            f = &mut stdout_lock;
+        }
         match options.target {
             Format::Raw => {
-                println!("{}", display_program(&program)?)
+                writeln!(f, "{}", display_program(&program)?)?;
             }
             Format::Blocks => {
                 let blocks = Blocks::try_from(program.as_ref())?;
-                println!("{}", blocks);
+                writeln!(f, "{}", blocks)?;
             }
             Format::Functions => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 let functions = blocks.functions()?;
-                println!("{}", functions);
+                writeln!(f, "{}", functions)?;
             }
             Format::Resolved => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 let functions = blocks.functions()?;
                 let resolved = functions.resolve()?;
-                println!("{}", resolved);
+                writeln!(f, "{}", resolved)?;
             }
             Format::Structured => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 let functions = blocks.functions()?;
                 let resolved = functions.resolve()?;
                 let structured = resolved.to_structured();
-                println!("{}", structured);
+                writeln!(f, "{}", structured)?;
             }
             Format::C => {
                 let blocks = Blocks::try_from(program.as_ref())?;
                 let functions = blocks.functions()?;
                 let resolved = functions.resolve()?;
                 let structured = resolved.to_structured();
-                println!("{}", structured.to_c_code());
+                let c_code = structured.to_c()?;
+                writeln!(f, "{}", c_code)?;
             }
         }
         Ok(())

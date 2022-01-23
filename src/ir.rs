@@ -22,6 +22,7 @@ pub mod program;
 pub mod block;
 pub mod function;
 pub mod c;
+pub mod c_inline;
 
 pub use instr::Instr;
 pub use program::Program;

@@ -20,7 +20,7 @@
 
 use std::fmt::{Display, Formatter};
 use itertools::Itertools;
-use crate::ir::instr::{BOp, HasOperand, OutputInfo, UOp};
+use crate::ir::instr::{BOp, OutputInfo, UOp};
 use crate::ir::instr::structured::{
     Instr, Operand, Extra, InterProc, Branching,
     Block, Condition, Functions,
@@ -64,22 +64,13 @@ impl ToC for Operand {
 
 impl ToC for UOp {
     fn fmt_c(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self { UOp::Neg => write!(f, "-") }
+        write!(f, "{}", self.pretty())
     }
 }
 
 impl ToC for BOp {
     fn fmt_c(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            BOp::Add => "+",
-            BOp::Sub => "-",
-            BOp::Mul => "*",
-            BOp::Div => "/",
-            BOp::Mod => "*",
-            BOp::CmpEq => "==",
-            BOp::CmpLe => "<=",
-            BOp::CmpLt => "<",
-        })
+        write!(f, "{}", self.pretty())
     }
 }
 
@@ -165,9 +156,10 @@ impl ToC for Instr {
     }
 }
 
-const PRELUDE: &str = indoc::indoc! {r#"
+pub(crate) const PRELUDE: &str = indoc::indoc! {r#"
     #include <stdint.h>
     #include <stdio.h>
+    #include <inttypes.h>
 
     typedef uint64_t WORD;
     typedef char *ADDR;
@@ -191,24 +183,9 @@ const PRELUDE: &str = indoc::indoc! {r#"
 
 impl ToC for Functions {
     fn fmt_c(&self, f: &mut Formatter) -> std::fmt::Result {
-        writeln!(f, "{}", PRELUDE)?;
+        writeln!(f, "{}\n\n", PRELUDE)?;
         for (k, func) in self.functions.iter().enumerate() {
-            let mut params = vec![String::new(); func.parameter_count as usize];
-            for (_, instr) in func.body.as_ref() {
-                for operand in instr.get_operands() {
-                    if let Operand::Var(x, k) = operand {
-                        if *k > 0 {
-                            params[((*k - 16) / 8) as usize] = x.clone();
-                        }
-                    }
-                }
-            }
-            params.reverse();
-            for (k, param) in params.iter_mut().enumerate() {
-                if param.is_empty() {
-                    *param = format!("ignored_param_{}", k);
-                }
-            }
+            let params = func.param_list();
             writeln!(f, "void global_function_{}({}) {{", k, params.into_iter()
                 .format_with(", ", |p, k| k(&format_args!("WORD {}", p))))?;
             if func.local_var_count > 0 {
