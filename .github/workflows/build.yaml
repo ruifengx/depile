@@ -34,7 +34,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: -- -D warnings
+        args: --all-features -- -D warnings
     - uses: actions-rs/cargo@v1
       with:
         command: test
@@ -53,6 +53,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: doc
+        args: --all-features
     - name: Copy Doc Index Page
       run: cp .github/pages/index.html ${{ env.DOC_PATH }}
     - name: Deploy Documentation

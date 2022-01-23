@@ -3,6 +3,7 @@
 [![language](https://img.shields.io/badge/language-Rust-red)](https://www.rust-lang.org/)
 [![license](https://img.shields.io/badge/License-AGPL--v3.0-blueviolet)](https://www.gnu.org/licenses/agpl-3.0.html)
 [![CI](https://github.com/ruifengx/depile/actions/workflows/build.yaml/badge.svg)](https://github.com/ruifengx/depile/actions/workflows/build.yaml)
+[![docs](https://img.shields.io/badge/Doc-GitHub%20Pages-brightgreen)](https://ruifengx.github.io/depile/)
 ![version](https://img.shields.io/badge/WIP-0.1-yellow)
 
 _"de-" for "apart", as opposed to "com-" for "together"._
