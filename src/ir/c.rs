@@ -153,7 +153,7 @@ const PRELUDE: &str = indoc::indoc! {r#"
 
     #define DEREF(p) (*(WORD *) (p))
     #define VAR(n) (*(((WORD *) FP) - n - 1))
-    inline WORD ReadLone() {
+    inline WORD ReadLong() {
         WORD x = 0;
         scanf("%" PRIu64, &x);
         return x;
