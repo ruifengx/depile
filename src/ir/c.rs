@@ -302,7 +302,7 @@ impl Conversion {
             Instr::Move { source, dest } => {
                 let source = self.handle_operand(source)?;
                 let dest = self.handle_operand(dest)?;
-                self.emit(Statement::Assigment { source, dest: dest });
+                self.emit(Statement::Assigment { source, dest });
                 self.invalidate_registers();
             }
             Instr::Read => self.record_register(r, Expr::Read),

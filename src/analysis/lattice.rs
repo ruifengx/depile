@@ -34,6 +34,8 @@ use crate::ir::instr::InstrExt;
 ///   fact a total order (a lexicographical order).
 /// Fortunately, we make no use of the partial order itself in data flow analysis, so this fact
 /// does not make a real obstacle.
+///
+/// [`BTreeSet`]: std::collections::BTreeSet
 pub trait JoinSemiLattice {
     /// The `⊥` element for this semi-lattice: `⊥ ⊓ x = x`.
     fn bottom<K: InstrExt>(env: &dyn ControlFlowExt<BlockKind=K>) -> Self;
