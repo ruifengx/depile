@@ -23,7 +23,6 @@ use std::fmt::{Display, Formatter};
 use thiserror::Error;
 use displaydoc::Display;
 use itertools::Itertools;
-use crate::ir::c::PRELUDE;
 use crate::ir::instr::{BOp, UOp, structured};
 use structured::{Instr, Branching, Extra, InterProc, Operand, write_indented};
 
@@ -143,6 +142,31 @@ pub struct Functions {
     /// (in other words, it is marked as the entry point for the whole program).
     pub entry_function: usize,
 }
+
+const PRELUDE: &str = indoc::indoc! {r#"
+    #include <stdint.h>
+    #include <stdio.h>
+    #include <inttypes.h>
+
+    typedef uint64_t WORD;
+    typedef char *ADDR;
+
+    #define DEREF(p) (*(WORD *) (p))
+    inline WORD ReadLone() {
+        WORD x = 0;
+        scanf("%" PRIu64, &x);
+        return x;
+    }
+    inline void WriteLong(WORD x) {
+        printf(" %" PRIu64, x);
+    }
+    inline void WriteLn() {
+        printf("\n");
+    }
+
+    static WORD global_back_buffer[32768 / 8];
+    const ADDR global_storage = (ADDR) global_back_buffer;
+"#};
 
 impl Display for Functions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
