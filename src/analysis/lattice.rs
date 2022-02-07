@@ -26,12 +26,14 @@ use crate::ir::instr::InstrExt;
 /// # Note
 /// This trait does not require a [`PartialOrd`], because the partial order implied by the
 /// semi-lattice structure is usually different from the `#[derive(PartialOrd)]` order:
+///
 /// - The order implied by semi-lattice structure is somewhat "conservative", in that it is more
 ///   reluctant to specify an order for pairs of seemingly-unrelated elements; e.g. for sets, such
 ///   partial order is usually based on set inclusion.
 /// - In contrast, the latter is in some sense more permissive, because it tends to make a
 ///   best-effort comparison for any pair of elements; e.g. [`PartialOrd`] for [`BTreeSet`] is in
 ///   fact a total order (a lexicographical order).
+///
 /// Fortunately, we make no use of the partial order itself in data flow analysis, so this fact
 /// does not make a real obstacle.
 ///
