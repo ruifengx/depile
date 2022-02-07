@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","Program validation error during conversion to a series of basic blocks."]],"struct":[["Block","Basic block."],["Blocks","Collection of basic blocks for a [`Program`]."]],"type":[["IndexedInstr","Iterator of indexed instructions into a block."]]});

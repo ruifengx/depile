@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","Program validation error during conversion to a series of basic blocks."],["ResolveError","Error during resolving function calls."]],"struct":[["Function","A function."],["Functions","Collection of functions for a `Program`."]]});

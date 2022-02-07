@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["depile"] = [{"text":"impl <a class=\"trait\" href=\"clap/derive/trait.FromArgMatches.html\" title=\"trait clap::derive::FromArgMatches\">FromArgMatches</a> for <a class=\"struct\" href=\"depile/cli/struct.Cli.html\" title=\"struct depile::cli::Cli\">Cli</a>","synthetic":false,"types":["depile::cli::Cli"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

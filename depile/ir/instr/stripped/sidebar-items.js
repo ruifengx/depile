@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Marker","Marker instructions for kind “stripped”."]],"type":[["Block","`Block` with kind “stripped”."],["Blocks","`Blocks` with kind “stripped”."],["Function","`Function` with kind “stripped”."],["Functions","`Functions` with kind “stripped”."],["Instr","`Instr`uction with kind “stripped”."],["Kind","Instruction kind “stripped”."]]});

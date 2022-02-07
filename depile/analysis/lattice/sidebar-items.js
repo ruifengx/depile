@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["JoinSemiLattice","Semi-lattice with a `⊓` operation."]]});

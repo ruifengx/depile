@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","Conversion error."],["Expr","C expressions."],["Statement","C statements."]],"struct":[["Function","C Functions."],["Functions","Collection of C functions."]]});

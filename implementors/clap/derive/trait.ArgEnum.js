@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["depile"] = [{"text":"impl <a class=\"trait\" href=\"clap/derive/trait.ArgEnum.html\" title=\"trait clap::derive::ArgEnum\">ArgEnum</a> for <a class=\"enum\" href=\"depile/cli/enum.Format.html\" title=\"enum depile::cli::Format\">Format</a>","synthetic":false,"types":["depile::cli::Format"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

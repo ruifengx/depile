@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","All kinds of errors that might happen during command line execution."],["Format","Supported target formats."]],"struct":[["Cli","Entry to the command line interface."]],"type":[["Result","Result type for the command line interface."]]});

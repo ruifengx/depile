@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["get_dominators","Compute dominator tree for function `func`."],["get_immediate_dominators","Compute immediate dominator for all blocks from `domtree`."]],"struct":[["DomAnalysis","Dominator analysis."]],"type":[["DomRel","Dominator Relation."],["ImmDomRel","Immediate Dominator Relation."]]});
